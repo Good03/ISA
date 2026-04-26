@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
   <style>
     :root {
       --bg-0:        #0b0d12;
@@ -248,6 +249,143 @@
     }
     .panel-body.dense { padding: 10px 12px; }
     .panel-body.flush { padding: 0; }
+
+    /* ─── Search dropdown (fixed-position overlay) ──────────────────── */
+    .search-drop {
+      position: fixed;
+      max-height: 280px;
+      overflow-y: auto;
+      background: var(--bg-2);
+      border: 1px solid var(--border-hi);
+      border-radius: 2px;
+      z-index: 200;
+      box-shadow: 0 8px 22px rgba(0,0,0,.55);
+    }
+    .search-drop.hidden { display: none; }
+    .search-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 7px 10px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text);
+      cursor: pointer;
+      border-bottom: 1px solid var(--border);
+      gap: 8px;
+    }
+    .search-item:last-child { border-bottom: none; }
+    .search-item:hover, .search-item.kbd-focus {
+      background: var(--bg-3);
+      color: var(--text-strong);
+    }
+    .search-item .si-tag {
+      font-size: 9px;
+      padding: 1px 5px;
+      border-radius: 2px;
+      letter-spacing: .3px;
+      font-weight: 700;
+    }
+    .search-item .si-tag.ready  { background: var(--buy-soft);  color: var(--buy);  }
+    .search-item .si-tag.empty  { background: rgba(120,123,134,.12); color: var(--text-dim); }
+    .search-empty {
+      padding: 10px; font-size: 11px; color: var(--text-muted);
+      text-align: center; font-family: var(--mono);
+    }
+
+    /* ─── Trained chip row (above the watchlist) ─────────────────────── */
+    .trained-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 8px 0 4px;
+      min-height: 4px;
+    }
+    .chip {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      font-weight: 600;
+      padding: 2px 7px;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      color: var(--text);
+      cursor: pointer;
+      transition: all .1s;
+      letter-spacing: .2px;
+    }
+    .chip:hover { border-color: var(--border-hi); color: var(--text-strong); }
+    .chip.active { background: var(--lstm-soft); border-color: var(--lstm); color: var(--lstm); }
+    .chip.active.ridge { background: var(--ridge-soft); border-color: var(--ridge); color: var(--ridge); }
+
+    /* ─── Modal ──────────────────────────────────────────────────────── */
+    .modal-back {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.65);
+      backdrop-filter: blur(2px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .modal-back.hidden { display: none; }
+    .modal {
+      background: var(--bg-1);
+      border: 1px solid var(--border-hi);
+      border-radius: 3px;
+      width: min(440px, 92vw);
+      box-shadow: 0 14px 40px rgba(0,0,0,.6);
+    }
+    .modal-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .modal-title {
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-strong);
+      letter-spacing: .3px;
+    }
+    .modal-close {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 16px;
+      cursor: pointer;
+      line-height: 1;
+      padding: 2px 4px;
+    }
+    .modal-close:hover { color: var(--text-strong); }
+    .modal-body { padding: 14px; }
+    .modal-body p { margin: 0 0 10px; font-size: 12px; line-height: 1.5; color: var(--text); }
+    .modal-body .text-muted { color: var(--text-muted); }
+    .param-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 6px 0 12px;
+      font-size: 11.5px;
+    }
+    .param-table td {
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border);
+      font-family: var(--mono);
+    }
+    .param-table td:first-child { color: var(--text-muted); }
+    .param-table td:last-child  { color: var(--text-strong); text-align: right; font-weight: 600; }
+    .param-table tr:last-child td { border-bottom: none; }
+    .modal-foot {
+      display: flex;
+      gap: 8px;
+      padding: 10px 14px;
+      border-top: 1px solid var(--border);
+      background: var(--bg-0);
+      justify-content: flex-end;
+    }
 
     /* ─── Watchlist (left ticker list) ───────────────────────────────── */
     .watch-row {
@@ -966,16 +1104,26 @@
     <!-- ───────── LEFT: watchlist + tune ───────── -->
     <div class="col">
 
-      <!-- Watchlist -->
+      <!-- Symbol picker -->
       <div class="panel">
         <div class="panel-header">
-          <span>Watchlist</span>
+          <span>Symbols</span>
           <span class="mono" style="color:var(--text-dim);text-transform:none;letter-spacing:0;font-size:10px;" id="watchlistCount">0</span>
         </div>
-        <div class="panel-body flush">
-          <div id="tickerBar">
-            <div class="empty">Loading symbols…</div>
+        <div class="panel-body" style="padding:10px 10px 0;">
+          <div style="position:relative;">
+            <input type="text" id="tickerSearch" class="input" placeholder="Search symbol… (e.g. AAPL)"
+                   autocomplete="off" spellcheck="false"
+                   oninput="onSearchInput(this.value)"
+                   onfocus="onSearchFocus()"
+                   onkeydown="onSearchKey(event)"
+                   style="font-family:var(--mono); text-transform:uppercase; letter-spacing:.3px; z-index: 999">
+            <div id="searchDrop" class="search-drop hidden"></div>
           </div>
+          <div id="trainedRow" class="trained-row"></div>
+        </div>
+        <div class="panel-body flush">
+          <div id="tickerBar"></div>
         </div>
       </div>
 
@@ -1348,6 +1496,36 @@
 </div>
 
 
+<!-- ═════════════════════ AAPL BEST-PARAMS MODAL ═════════════════════ -->
+<div id="aaplModal" class="modal-back hidden" onclick="if(event.target===this) closeAaplModal()">
+  <div class="modal" role="dialog" aria-labelledby="aaplModalTitle">
+    <div class="modal-head">
+      <span class="modal-title" id="aaplModalTitle">AAPL · best LSTM configuration</span>
+      <button class="modal-close" onclick="closeAaplModal()" title="Close">×</button>
+    </div>
+    <div class="modal-body">
+      <p>You picked <strong>AAPL</strong>. The hyper-parameters below are the
+      best LSTM configuration found during the mini-project research sweep
+      and reproduce the reported test-set numbers.</p>
+      <table class="param-table">
+        <tr><td>Look-back</td><td>10 days</td></tr>
+        <tr><td>Units</td><td>50</td></tr>
+        <tr><td>Epochs</td><td>50</td></tr>
+        <tr><td>Optimiser</td><td>Adam (lr = 1e-3)</td></tr>
+        <tr><td>Loss</td><td>MSE</td></tr>
+      </table>
+      <p class="text-muted" style="font-size:11px;">Click <em>Apply &amp; train</em> to load these
+      values into the tuner and start training immediately, or <em>Just apply</em>
+      to load them without training.</p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeAaplModal()">Dismiss</button>
+      <button class="btn" onclick="applyAaplDefaults(false)">Just apply</button>
+      <button class="btn primary-lstm" onclick="applyAaplDefaults(true)">Apply &amp; train</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script>
 // ── Tab switching ──────────────────────────────────────────────────────────
@@ -1594,39 +1772,157 @@ function refreshSymBar() {
   }
 }
 
-// ── Boot ───────────────────────────────────────────────────────────────────
-async function boot() {
+// ── All-symbols catalog (populated from /api/tickers) ─────────────────────
+let allTickers = [];
+
+async function refreshTickers() {
   const res  = await fetch('/api/tickers');
   const data = await res.json();
+  allTickers         = data.tickers || [];
   readyTickers.lstm  = data.lstm_ready  || [];
   readyTickers.ridge = data.ridge_ready || [];
-
-  const bar = $('tickerBar');
-  bar.innerHTML = '';
-  const tickers = data.tickers || [];
-  tickers.forEach(t => {
-    const hasL = readyTickers.lstm.includes(t);
-    const hasR = readyTickers.ridge.includes(t);
-    const row = document.createElement('div');
-    row.className      = 'watch-row';
-    row.dataset.ticker = t;
-    row.onclick        = () => selectTicker(t);
-    row.innerHTML = `
-      <span class="watch-symbol">${t}</span>
-      <span class="watch-meta">NASDAQ-100</span>
-      <span class="watch-tags">
-        <span class="tag-mini ${hasL ? 'lstm' : 'muted'}">L</span>
-        <span class="tag-mini ${hasR ? 'ridge' : 'muted'}">R</span>
-      </span>`;
-    bar.appendChild(row);
-  });
-  $('watchlistCount').textContent = `${tickers.length} symbols`;
+  $('watchlistCount').textContent = `${allTickers.length} symbols`;
   $('readyBadge').textContent =
     `${readyTickers.lstm.length} LSTM · ${readyTickers.ridge.length} Ridge models ready`;
+  renderTrainedRow();
+}
 
+function renderTrainedRow() {
+  const trained = Array.from(new Set([...readyTickers.lstm, ...readyTickers.ridge])).sort();
+  const row = $('trainedRow');
+  if (!trained.length) {
+    row.innerHTML = `<span style="font-family:var(--mono); font-size:10px; color:var(--text-dim);">
+      No trained symbols yet — search above to add one.</span>`;
+    return;
+  }
+  row.innerHTML = trained.map(t => {
+    const isActive = t === currentTicker;
+    const accent = isActive && currentModel === 'ridge' ? 'active ridge'
+                 : isActive ? 'active' : '';
+    return `<span class="chip ${accent}" onclick="selectTicker('${t}')">${t}</span>`;
+  }).join('');
+}
+
+// ── Boot ───────────────────────────────────────────────────────────────────
+async function boot() {
+  await refreshTickers();
+  $('tickerBar').innerHTML = '';
   loadSplitDefaults('lstm');
-  setModel('lstm');           // updates buttons + config + reroutes selectTicker
-  if (tickers.length) selectTicker(tickers[0]);
+  setModel('lstm');
+  if (readyTickers.lstm.length) {
+    selectTicker(readyTickers.lstm[0]);
+  } else if (readyTickers.ridge.length) {
+    selectTicker(readyTickers.ridge[0]);
+  } else {
+    showEmptyHero();
+  }
+}
+
+function showEmptyHero() {
+  $('metricsBody').innerHTML = `
+    <div class="empty">
+      No trained symbols yet.<br>
+      Search a ticker above to get started.
+    </div>`;
+  $('nextDayBody').innerHTML = `<div class="empty">—</div>`;
+  $('chartTitle').textContent = 'No symbol selected';
+  $('chartSub').textContent = 'Search a NASDAQ-100 ticker (e.g. AAPL) and click Run training.';
+}
+
+// ── Search ─────────────────────────────────────────────────────────────────
+let searchFocusIdx = -1;
+
+function filteredSearchList(q) {
+  q = (q || '').trim().toUpperCase();
+  if (!q) return allTickers.slice(0, 30);
+  const starts = allTickers.filter(t => t.startsWith(q));
+  const contains = allTickers.filter(t => !t.startsWith(q) && t.includes(q));
+  return [...starts, ...contains].slice(0, 30);
+}
+
+function onSearchFocus() {
+  renderSearchDrop($('tickerSearch').value);
+  $('searchDrop').classList.remove('hidden');
+}
+
+function onSearchInput(v) {
+  searchFocusIdx = -1;
+  renderSearchDrop(v);
+  $('searchDrop').classList.remove('hidden');
+}
+
+function renderSearchDrop(query) {
+  const list = filteredSearchList(query);
+  const drop = $('searchDrop');
+  if (!list.length) {
+    drop.innerHTML = `<div class="search-empty">No symbol matches “${query}”.</div>`;
+    return;
+  }
+  drop.innerHTML = list.map((t, i) => {
+    const ready = readyTickers.lstm.includes(t) || readyTickers.ridge.includes(t);
+    const tag = ready
+      ? `<span class="si-tag ready">trained</span>`
+      : `<span class="si-tag empty">untrained</span>`;
+    return `<div class="search-item${i === searchFocusIdx ? ' kbd-focus' : ''}"
+                 data-ticker="${t}"
+                 onmousedown="event.preventDefault();selectFromSearch('${t}')">
+              <span>${t}</span>${tag}
+            </div>`;
+  }).join('');
+}
+
+function onSearchKey(e) {
+  const drop = $('searchDrop');
+  const items = drop.querySelectorAll('.search-item');
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    searchFocusIdx = Math.min(searchFocusIdx + 1, items.length - 1);
+    items.forEach((el, i) => el.classList.toggle('kbd-focus', i === searchFocusIdx));
+    items[searchFocusIdx]?.scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    searchFocusIdx = Math.max(searchFocusIdx - 1, 0);
+    items.forEach((el, i) => el.classList.toggle('kbd-focus', i === searchFocusIdx));
+    items[searchFocusIdx]?.scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    const target = items[searchFocusIdx] || items[0];
+    if (target) selectFromSearch(target.dataset.ticker);
+  } else if (e.key === 'Escape') {
+    drop.classList.add('hidden');
+    e.target.blur();
+  }
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('#tickerSearch') && !e.target.closest('#searchDrop')) {
+    $('searchDrop').classList.add('hidden');
+  }
+});
+
+function selectFromSearch(t) {
+  $('tickerSearch').value = t;
+  $('searchDrop').classList.add('hidden');
+  selectTicker(t);
+  if (t === 'AAPL' && !readyTickers.lstm.includes('AAPL')) {
+    openAaplModal();
+  }
+}
+
+// ── AAPL best-params modal ─────────────────────────────────────────────────
+function openAaplModal() { $('aaplModal').classList.remove('hidden'); }
+function closeAaplModal() { $('aaplModal').classList.add('hidden'); }
+
+function applyAaplDefaults(thenTrain) {
+  setModel('lstm');
+  $('slLookback').value = 10; $('vLookback').textContent = '10';
+  $('slUnits').value    = 50; $('vUnits').textContent    = '50';
+  $('slEpochs').value   = 50; $('vEpochs').textContent   = '50';
+  loadSplitDefaults('lstm');
+  $('tuneBody').style.display = '';
+  $('tuneChevron').textContent = '▾';
+  closeAaplModal();
+  if (thenTrain) trainLSTM();
 }
 
 // ── Model toggle ───────────────────────────────────────────────────────────
@@ -1673,13 +1969,31 @@ async function selectTicker(ticker) {
     row.classList.toggle('active', isActive);
     row.classList.toggle('ridge-active', isActive && currentModel === 'ridge');
   });
+  renderTrainedRow();
   $('chartTitle').textContent = `${ticker} · actual vs predicted close`;
   refreshSymBar();
 
   if (!readyTickers[currentModel].includes(ticker)) {
-    $('metricsBody').innerHTML =
-      `<div class="empty" style="color:var(--warn);">${currentModel.toUpperCase()} not trained for ${ticker}</div>`;
-    $('nextDayBody').innerHTML = `<div class="empty">No forecast available</div>`;
+    const otherModel = currentModel === 'lstm' ? 'ridge' : 'lstm';
+    const otherReady = readyTickers[otherModel].includes(ticker);
+    const trainBtnCls = currentModel === 'lstm' ? 'primary-lstm' : 'primary-ridge';
+    const trainAction = currentModel === 'lstm'
+      ? `trainLSTM()`
+      : `applyRidge()`;
+    const switchHint = otherReady
+      ? `<button class="btn xs" style="margin-top:6px;" onclick="setModel('${otherModel}')">View ${otherModel.toUpperCase()} instead</button>`
+      : '';
+    $('metricsBody').innerHTML = `
+      <div class="empty" style="color:var(--text); padding:18px 14px;">
+        <div style="color:var(--warn); font-weight:600; margin-bottom:6px;">No ${currentModel.toUpperCase()} checkpoint for ${ticker}</div>
+        <div class="text-muted" style="font-size:11px; margin-bottom:10px;">
+          Train one now — defaults are pre-filled in the tuner.
+        </div>
+        <button class="btn ${trainBtnCls}" onclick="${trainAction}">Run training</button>
+        ${switchHint}
+      </div>`;
+    $('nextDayBody').innerHTML = `<div class="empty">No forecast yet — train ${currentModel.toUpperCase()} first.</div>`;
+    if (chart) { chart.destroy(); chart = null; }
     return;
   }
 
@@ -1945,10 +2259,14 @@ async function applyRidge() {
   hideSpinner();
   if (!res.ok) { alert('Ridge refit failed'); return; }
   const data = await res.json();
+  if (!readyTickers.ridge.includes(currentTicker)) readyTickers.ridge.push(currentTicker);
   _stateSet(currentTicker, 'ridge', data, data.next_day ?? null, { alpha });
   _applyState(_stateGet(currentTicker, 'ridge'));
   patchQualityRow(currentTicker, 'ridge', data.r2, data.rmse, data.mae);
   _refreshTickerBadges();
+  renderTrainedRow();
+  $('readyBadge').textContent =
+    `${readyTickers.lstm.length} LSTM · ${readyTickers.ridge.length} Ridge models ready`;
 }
 
 // ── LSTM tuning ────────────────────────────────────────────────────────────
@@ -2075,11 +2393,15 @@ async function trainLSTM() {
         prog.style.display = 'none';
 
         const cfg = st.result.config;
+        if (!readyTickers.lstm.includes(currentTicker)) readyTickers.lstm.push(currentTicker);
         _stateSet(currentTicker, 'lstm', st.result, st.result.next_day ?? null, cfg);
         _applyState(_stateGet(currentTicker, 'lstm'));
         if (st.result.val_r2 !== undefined) renderMetrics(st.result);
         patchQualityRow(currentTicker, 'lstm', st.result.r2, st.result.rmse, st.result.mae);
         _refreshTickerBadges();
+        renderTrainedRow();
+        $('readyBadge').textContent =
+          `${readyTickers.lstm.length} LSTM · ${readyTickers.ridge.length} Ridge models ready`;
       }, 900);
 
     } else if (st.status === 'error') {
