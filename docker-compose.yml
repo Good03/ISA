@@ -1,0 +1,21 @@
+version: "3.9"
+
+services:
+  app:
+    build:
+      context: ./project
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      # Dataset (read-only mount from host)
+      - ./data:/app/data:ro
+      # Trained models persist between container restarts
+      - model_cache:/app/model
+    environment:
+      - MODEL_DIR=/app/model
+      - DATA_PATH=/app/data/NASDAQ100_Historical_Data.csv
+    restart: unless-stopped
+
+volumes:
+  model_cache:

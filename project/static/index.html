@@ -1,0 +1,1048 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NASDAQ-100 Stock Predictor — ISA MP3</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <style>
+    :root {
+      --accent-lstm:  #e74c3c;
+      --accent-ridge: #3498db;
+      --bg:      #0d1117;
+      --surface: #161b22;
+      --border:  #30363d;
+      --text:    #e6edf3;
+      --muted:   #8b949e;
+    }
+    * { box-sizing: border-box; }
+    body { background: var(--bg); color: var(--text);
+           font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+    /* ── Navbar ── */
+    .navbar { background: var(--surface) !important; border-bottom: 1px solid var(--border); }
+    .navbar-brand { font-size: 1.05rem; font-weight: 700; color: var(--text) !important; }
+    .navbar-sub   { color: var(--muted); font-size: .8rem; }
+
+    /* ── Cards ── */
+    .card { background: var(--surface); border: 1px solid var(--border) !important;
+            border-radius: 10px; color: var(--text) !important; }
+    .card-header { background: transparent; border-bottom: 1px solid var(--border);
+                   font-weight: 600; font-size: .8rem; text-transform: uppercase;
+                   letter-spacing: .5px; color: var(--muted) !important; padding: 10px 14px; }
+    .card-body { color: var(--text) !important; padding: 14px; }
+
+    /* ── Control bar ── */
+    .ctrl { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+    .ctrl-sep { width: 1px; height: 24px; background: var(--border); flex-shrink: 0; }
+    .ctrl-label { color: var(--muted); font-size: .75rem; font-weight: 600;
+                  text-transform: uppercase; letter-spacing: .4px; white-space: nowrap; }
+
+    /* ── Buttons ── */
+    .tbtn, .mbtn {
+      border: 1px solid var(--border); background: transparent; color: var(--text);
+      border-radius: 6px; padding: 4px 13px; font-size: .84rem; cursor: pointer;
+      transition: all .15s; font-weight: 600;
+    }
+    .tbtn:hover { border-color: var(--text); }
+    .tbtn.al { background: var(--accent-lstm);  border-color: var(--accent-lstm);  color: #fff; }
+    .tbtn.ar { background: var(--accent-ridge); border-color: var(--accent-ridge); color: #fff; }
+    .mbtn         { color: var(--muted); font-weight: 500; }
+    .mbtn.al      { background: var(--accent-lstm);  border-color: var(--accent-lstm);  color: #fff; font-weight: 600; }
+    .mbtn.ar      { background: var(--accent-ridge); border-color: var(--accent-ridge); color: #fff; font-weight: 600; }
+
+    /* ── Metric rows ── */
+    .mrow { display: flex; justify-content: space-between; align-items: center;
+            padding: 9px 0; border-bottom: 1px solid var(--border); }
+    .mrow:last-child { border-bottom: none; }
+    .mlbl { color: var(--muted) !important; font-size: .88rem; }
+    .mval { font-weight: 700; font-size: 1rem; color: var(--text) !important; }
+
+    /* ── Info list ── */
+    .irow { display: flex; justify-content: space-between; padding: 6px 0;
+            font-size: .84rem; border-bottom: 1px solid var(--border); }
+    .irow:last-child { border-bottom: none; }
+    .ikey { color: var(--muted) !important; }
+    .ival { font-weight: 600; color: var(--text) !important; }
+
+    /* ── Prediction ── */
+    .pred-price  { font-size: 1.7rem; font-weight: 700; }
+    .pred-change { font-size: .88rem; }
+
+    /* ── Chart area ── */
+    #chartWrap { position: relative; height: 400px; }
+    .spinner-overlay { position: absolute; inset: 0; display: flex; align-items: center;
+      justify-content: center; background: rgba(13,17,23,.7); border-radius: 10px; z-index: 10; }
+    .hidden { display: none !important; }
+
+    /* ── Date pickers ── */
+    .date-input {
+      background: var(--bg); border: 1px solid var(--border); color: var(--text);
+      border-radius: 6px; padding: 3px 8px; font-size: .82rem;
+      color-scheme: dark;
+    }
+    .date-input:focus { outline: none; border-color: var(--muted); }
+
+    /* ── Split date table ── */
+    .split-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+    .split-table td { padding: 4px 4px; vertical-align: middle; font-size: .82rem; }
+    .split-table td:first-child { color: var(--muted); width: 62px; white-space: nowrap; }
+    .split-table .date-input { width: 108px; font-size: .78rem; padding: 3px 6px; }
+    .split-sep { color: var(--muted); padding: 0 3px; }
+    .split-divider { border: none; border-top: 1px solid var(--border); margin: 10px 0; }
+
+    /* ── Range sliders ── */
+    .param-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .param-row label { color: var(--muted); font-size: .82rem; width: 80px; flex-shrink: 0; }
+    .param-row input[type=range] { flex: 1; accent-color: var(--accent-lstm); }
+    .range-lstm  input[type=range] { accent-color: var(--accent-lstm);  }
+    .range-ridge input[type=range] { accent-color: var(--accent-ridge); }
+    .param-val  { color: var(--text); font-weight: 700; font-size: .84rem; width: 50px; text-align: right; }
+
+    /* ── Progress bar ── */
+    .prog-wrap { margin-top: 10px; display: none; }
+    .prog-bar  { height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
+    .prog-fill { height: 100%; border-radius: 3px; background: var(--accent-lstm);
+                 width: 0%; transition: width .4s ease; }
+    .prog-txt  { color: var(--muted); font-size: .78rem; margin-top: 5px; }
+
+    /* ── Legend ── */
+    .leg { display: inline-flex; align-items: center; gap: 5px;
+           font-size: .78rem; color: var(--muted); }
+    .leg-line { width: 24px; height: 3px; border-radius: 2px; display: inline-block; }
+
+    /* ── Apply button ── */
+    .apply-btn {
+      width: 100%; padding: 7px; border-radius: 7px; font-weight: 600; font-size: .85rem;
+      cursor: pointer; border: none; margin-top: 4px; transition: opacity .15s;
+    }
+    .apply-btn:hover { opacity: .85; }
+    .apply-lstm  { background: var(--accent-lstm);  color: #fff; }
+    .apply-ridge { background: var(--accent-ridge); color: #fff; }
+
+    /* ── Tab bar ── */
+    .tab-bar { display: flex; gap: 4px; padding: 0 16px;
+               background: var(--surface); border-bottom: 1px solid var(--border); }
+    .tab-btn { background: transparent; border: none; border-bottom: 3px solid transparent;
+               color: var(--muted); padding: 10px 18px; font-size: .87rem; font-weight: 600;
+               cursor: pointer; transition: color .15s, border-color .15s; }
+    .tab-btn:hover  { color: var(--text); }
+    .tab-btn.active { color: var(--text); border-bottom-color: var(--accent-lstm); }
+    .tab-view { display: none; }
+    .tab-view.active { display: block; }
+
+    /* ── Risk assessment cards ── */
+    .risk-section { margin-bottom: 20px; }
+    .risk-badge {
+      display: inline-block; padding: 3px 10px; border-radius: 20px;
+      font-size: .8rem; font-weight: 700; letter-spacing: .3px;
+    }
+    .risk-minimal  { background: #1a4731; color: #2ecc71; }
+    .risk-limited  { background: #1a3a4a; color: #3498db; }
+    .risk-high     { background: #4a1a1a; color: #e74c3c; }
+    .risk-medium   { background: #3a3a1a; color: #f39c12; }
+
+    .ra-table { width: 100%; border-collapse: collapse; font-size: .84rem; }
+    .ra-table th { color: var(--muted); font-weight: 600; text-transform: uppercase;
+                   font-size: .72rem; letter-spacing: .4px; padding: 6px 10px;
+                   border-bottom: 1px solid var(--border); text-align: left; }
+    .ra-table td { padding: 8px 10px; border-bottom: 1px solid var(--border);
+                   color: var(--text); vertical-align: top; }
+    .ra-table tr:last-child td { border-bottom: none; }
+    .ra-table tr:hover td { background: rgba(255,255,255,.03); }
+
+    .improvement-item { display: flex; gap: 12px; padding: 10px 0;
+                        border-bottom: 1px solid var(--border); }
+    .improvement-item:last-child { border-bottom: none; }
+    .imp-icon { font-size: 1.3rem; flex-shrink: 0; margin-top: 2px; }
+    .imp-title { font-weight: 700; font-size: .88rem; margin-bottom: 3px; }
+    .imp-desc  { color: var(--muted); font-size: .82rem; line-height: 1.5; }
+    .imp-tag   { display: inline-block; background: var(--border); border-radius: 4px;
+                 padding: 1px 7px; font-size: .72rem; color: var(--muted); margin-top: 4px; }
+
+    .perf-good   { color: #2ecc71; font-weight: 700; }
+    .perf-ok     { color: #f39c12; font-weight: 700; }
+    .perf-bad    { color: #e74c3c; font-weight: 700; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar navbar-dark px-3 py-2">
+  <span class="navbar-brand">📈 NASDAQ-100 Stock Predictor</span>
+  <span class="navbar-sub">ISA Mini-Project 3 — LSTM vs Ridge Regression</span>
+</nav>
+
+<!-- Tab bar -->
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="switchTab('predictions')">📊 Predictions</button>
+  <button class="tab-btn"        onclick="switchTab('risk')">⚠️ Risk Assessment</button>
+</div>
+
+<div class="container-fluid p-3">
+
+<!-- ═══════════════════════════════════════════════════════════ PREDICTIONS TAB -->
+<div id="view-predictions" class="tab-view active">
+
+  <!-- Control bar -->
+  <div class="ctrl">
+    <span class="ctrl-label">Ticker</span>
+    <div id="tickerBar" class="d-flex gap-2 flex-wrap">
+      <span style="color:var(--muted);font-size:.84rem;">Loading…</span>
+    </div>
+    <div class="ctrl-sep"></div>
+    <span class="ctrl-label">Model</span>
+    <button class="mbtn al" id="btnLSTM"  onclick="setModel('lstm')">LSTM</button>
+    <button class="mbtn"    id="btnRidge" onclick="setModel('ridge')">Ridge</button>
+  </div>
+
+  <div class="row g-3">
+
+    <!-- ── Left panel ── -->
+    <div class="col-xl-3 col-lg-4 d-flex flex-column gap-3">
+
+      <!-- Metrics -->
+      <div class="card">
+        <div class="card-header">Model Metrics — Test Set</div>
+        <div class="card-body" id="metricsBody">
+          <p style="color:var(--muted);font-size:.84rem;margin:0;">Select a ticker.</p>
+        </div>
+      </div>
+
+      <!-- Next-day prediction -->
+      <div class="card">
+        <div class="card-header">Next-Day Prediction</div>
+        <div class="card-body" id="nextDayBody">
+          <p style="color:var(--muted);font-size:.84rem;margin:0;">Select a ticker.</p>
+        </div>
+      </div>
+
+      <!-- Tune parameters -->
+      <div class="card">
+        <div class="card-header" style="cursor:pointer;" onclick="toggleTune()">
+          ⚙ Tune Parameters <span id="tuneChevron" style="float:right;">▲</span>
+        </div>
+        <div class="card-body" id="tuneBody">
+
+          <!-- Data splits (shared between models) -->
+          <p style="color:var(--muted);font-size:.75rem;font-weight:600;
+                    text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Data Splits</p>
+          <table class="split-table">
+            <tr>
+              <td>Train</td>
+              <td><input type="date" class="date-input" id="splitTrainStart"></td>
+              <td class="split-sep">→</td>
+              <td><input type="date" class="date-input" id="splitTrainEnd"></td>
+            </tr>
+            <tr>
+              <td>Validate</td>
+              <td><input type="date" class="date-input" id="splitValStart"></td>
+              <td class="split-sep">→</td>
+              <td><input type="date" class="date-input" id="splitValEnd"></td>
+            </tr>
+            <tr>
+              <td>Test</td>
+              <td><input type="date" class="date-input" id="splitTestStart"></td>
+              <td class="split-sep">→</td>
+              <td><input type="date" class="date-input" id="splitTestEnd"></td>
+            </tr>
+          </table>
+          <hr class="split-divider">
+
+          <!-- LSTM params -->
+          <div id="tunelstm" class="range-lstm">
+            <div class="param-row">
+              <label>Look-back</label>
+              <input type="range" id="slLookback" min="1" max="60" value="5"
+                     oninput="$('vLookback').textContent=this.value">
+              <span class="param-val" id="vLookback">5</span>
+            </div>
+            <div class="param-row">
+              <label>Units</label>
+              <input type="range" id="slUnits" min="2" max="128" value="5"
+                     oninput="$('vUnits').textContent=this.value">
+              <span class="param-val" id="vUnits">5</span>
+            </div>
+            <div class="param-row">
+              <label>Epochs</label>
+              <input type="range" id="slEpochs" min="5" max="200" value="30"
+                     oninput="$('vEpochs').textContent=this.value">
+              <span class="param-val" id="vEpochs">30</span>
+            </div>
+            <button class="apply-btn apply-lstm" onclick="trainLSTM()">▶ Train</button>
+            <div class="prog-wrap" id="lstmProg">
+              <div class="prog-bar"><div class="prog-fill" id="progFill"></div></div>
+              <p class="prog-txt" id="progTxt">Starting…</p>
+            </div>
+          </div>
+
+          <!-- Ridge params -->
+          <div id="tuneridge" class="range-ridge" style="display:none;">
+            <div class="param-row">
+              <label>Alpha</label>
+              <input type="range" id="slAlpha" min="-4" max="4" step="0.01" value="0"
+                     oninput="onAlphaSlide(this.value)">
+              <span class="param-val" id="vAlpha">1.00</span>
+            </div>
+            <p style="color:var(--muted);font-size:.75rem;margin-bottom:8px;">
+              Alpha = 10<sup>x</sup> &nbsp;(log scale, 0.0001 – 10000)
+            </p>
+            <button class="apply-btn apply-ridge" onclick="applyRidge()">▶ Apply</button>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Model config info -->
+      <div class="card">
+        <div class="card-header">Model Configuration</div>
+        <div class="card-body" id="modelConfigBody"></div>
+      </div>
+
+    </div><!-- /left -->
+
+    <!-- ── Right panel: Chart ── -->
+    <div class="col-xl-9 col-lg-8">
+      <div class="card h-100">
+
+        <!-- Title + legend -->
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span id="chartTitle">Actual vs Predicted Close Price</span>
+          <div class="d-flex gap-3">
+            <span class="leg"><span class="leg-line" style="background:#e6edf3;"></span>Actual</span>
+            <span class="leg">
+              <span class="leg-line" id="legColor" style="background:var(--accent-lstm);"></span>
+              <span id="legLabel">LSTM</span>
+            </span>
+          </div>
+        </div>
+
+        <!-- Date range row -->
+        <div style="display:flex; align-items:center; gap:10px; padding:8px 14px;
+                    border-bottom:1px solid var(--border); flex-wrap:wrap;">
+          <span style="color:var(--muted);font-size:.8rem;font-weight:600;">Date range:</span>
+          <input type="date" class="date-input" id="dateFrom" onchange="applyDateFilter()">
+          <span style="color:var(--muted);font-size:.8rem;">→</span>
+          <input type="date" class="date-input" id="dateTo"   onchange="applyDateFilter()">
+          <button onclick="resetDates()"
+                  style="background:transparent;border:1px solid var(--border);color:var(--muted);
+                         border-radius:5px;padding:2px 10px;font-size:.78rem;cursor:pointer;">
+            Reset
+          </button>
+        </div>
+
+        <div class="card-body" style="position:relative;">
+          <div id="chartWrap">
+            <div class="spinner-overlay hidden" id="spinner">
+              <div class="spinner-border" id="spinnerEl" style="color:var(--accent-lstm);" role="status"></div>
+            </div>
+            <canvas id="priceChart"></canvas>
+          </div>
+          <p style="color:var(--muted);font-size:.78rem;margin-top:8px;text-align:center;" id="chartSub"></p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div><!-- /view-predictions -->
+
+
+<!-- ═══════════════════════════════════════════════════════════ RISK ASSESSMENT TAB -->
+<div id="view-risk" class="tab-view">
+<div class="row g-3 mt-0">
+
+  <!-- ── Column 1: EU AI Act + Quality ── -->
+  <div class="col-lg-6">
+
+    <!-- EU AI Act Classification -->
+    <div class="card risk-section">
+      <div class="card-header">EU AI Act — Risk Classification</div>
+      <div class="card-body">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <span class="risk-badge risk-limited">LIMITED RISK</span>
+          <span style="color:var(--muted);font-size:.84rem;">Article 52 — Transparency obligations</span>
+        </div>
+        <table class="ra-table">
+          <tr><th>Criterion</th><th>Assessment</th></tr>
+          <tr>
+            <td>System category</td>
+            <td>Automated financial data analysis — stock price forecasting for research &amp; education</td>
+          </tr>
+          <tr>
+            <td>Annex III (high-risk list)</td>
+            <td>Not listed. Credit-scoring AI is high-risk (Art. 6 + Annex III §5b); pure price <em>prediction</em> for non-binding use is not.</td>
+          </tr>
+          <tr>
+            <td>Transparency obligation</td>
+            <td>Users must be informed they interact with an AI system and that output is not financial advice.</td>
+          </tr>
+          <tr>
+            <td>Would become high-risk if…</td>
+            <td>Integrated into a live trading system making binding investment decisions on behalf of users.</td>
+          </tr>
+          <tr>
+            <td>GPAI applicability</td>
+            <td>Not applicable — models are task-specific, trained from scratch or fine-tuned on domain data.</td>
+          </tr>
+        </table>
+        <div style="margin-top:12px;padding:10px;background:rgba(52,152,219,.08);
+                    border:1px solid rgba(52,152,219,.25);border-radius:8px;font-size:.82rem;
+                    color:var(--muted);">
+          ⚠️ <strong style="color:var(--text);">Disclaimer:</strong>
+          This system is an educational prototype. Predictions are not financial advice.
+          Do not use model output as the sole basis for investment decisions.
+        </div>
+      </div>
+    </div>
+
+    <!-- Risk Factors -->
+    <div class="card risk-section">
+      <div class="card-header">Risk Factors</div>
+      <div class="card-body p-0">
+        <table class="ra-table">
+          <tr>
+            <th>Risk</th><th>Severity</th><th>Likelihood</th><th>Mitigation</th>
+          </tr>
+          <tr>
+            <td>Used for real investment decisions</td>
+            <td><span class="risk-badge risk-high">HIGH</span></td>
+            <td><span class="risk-badge risk-medium">MEDIUM</span></td>
+            <td>Prominent disclaimer; no live brokerage integration</td>
+          </tr>
+          <tr>
+            <td>Distribution shift (post-2019 data)</td>
+            <td><span class="risk-badge risk-high">HIGH</span></td>
+            <td><span class="risk-badge risk-high">HIGH</span></td>
+            <td>Document training cutoff; periodic retraining pipeline</td>
+          </tr>
+          <tr>
+            <td>Stock splits distorting price scale</td>
+            <td><span class="risk-badge risk-medium">MEDIUM</span></td>
+            <td><span class="risk-badge risk-high">HIGH</span></td>
+            <td>Use Adj Close; scaler fitted on training distribution only</td>
+          </tr>
+          <tr>
+            <td>Overfitting to training period</td>
+            <td><span class="risk-badge risk-medium">MEDIUM</span></td>
+            <td><span class="risk-badge risk-medium">MEDIUM</span></td>
+            <td>Early stopping; separate validation split; test on unseen period</td>
+          </tr>
+          <tr>
+            <td>Survivorship bias in NASDAQ-100</td>
+            <td><span class="risk-badge risk-medium">MEDIUM</span></td>
+            <td><span class="risk-badge risk-high">HIGH</span></td>
+            <td>Document limitation; do not generalise to delisted tickers</td>
+          </tr>
+          <tr>
+            <td>No uncertainty quantification</td>
+            <td><span class="risk-badge risk-limited">LOW</span></td>
+            <td><span class="risk-badge risk-high">HIGH</span></td>
+            <td>Report as limitation; propose Bayesian LSTM as future work</td>
+          </tr>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /col 1 -->
+
+  <!-- ── Column 2: Model quality + Improvements ── -->
+  <div class="col-lg-6">
+
+    <!-- Model quality summary -->
+    <div class="card risk-section">
+      <div class="card-header">Model Quality — All Tickers (Test Set)</div>
+      <div class="card-body p-0">
+        <table class="ra-table" id="qualityTable">
+          <tr>
+            <th>Ticker</th>
+            <th>LSTM R²</th><th>LSTM RMSE</th>
+            <th>Ridge R²</th><th>Ridge RMSE</th>
+            <th>Winner</th>
+          </tr>
+          <tr><td colspan="6" style="color:var(--muted);text-align:center;padding:14px;">Loading…</td></tr>
+        </table>
+        <div style="padding:10px 10px 6px;" id="qualityAvg"></div>
+      </div>
+    </div>
+
+    <!-- Known limitations -->
+    <div class="card risk-section">
+      <div class="card-header">Known Limitations</div>
+      <div class="card-body p-0">
+        <table class="ra-table">
+          <tr><th>#</th><th>Limitation</th><th>Impact</th></tr>
+          <tr>
+            <td>1</td>
+            <td><strong>Training cutoff 2018</strong> — model has no knowledge of COVID crash (2020), rate-hike bear market (2022), or AI boom (2023–24)</td>
+            <td>High prediction error on post-2019 data</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td><strong>Univariate LSTM</strong> — uses only Close price; ignores volume, news sentiment, macroeconomic indicators, earnings announcements</td>
+            <td>Cannot react to fundamental events</td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td><strong>Random-walk baseline</strong> — both models largely predict "tomorrow ≈ today"; R² is high because stock prices are autocorrelated, not because the model captures alpha</td>
+            <td>Misleadingly good R² metrics</td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td><strong>Point predictions only</strong> — no confidence intervals or probability distributions; user cannot assess prediction uncertainty</td>
+            <td>Overconfident decision-making risk</td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td><strong>Single-step horizon</strong> — only 1-day ahead prediction; not suitable for longer-term portfolio planning</td>
+            <td>Limited practical applicability</td>
+          </tr>
+          <tr>
+            <td>6</td>
+            <td><strong>No feedback loop</strong> — model does not learn from its own errors in production; performance may degrade silently over time</td>
+            <td>Undetected model drift</td>
+          </tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- Proposed improvements -->
+    <div class="card risk-section">
+      <div class="card-header">Proposed Improvements</div>
+      <div class="card-body">
+
+        <div class="improvement-item">
+          <div class="imp-icon">🔄</div>
+          <div>
+            <div class="imp-title">Feedback system</div>
+            <div class="imp-desc">
+              Collect user-flagged prediction errors via a thumbs-up/down UI widget.
+              Log actual vs predicted into a feedback database. Use accumulated errors to
+              trigger automatic weekly retraining when RMSE on recent data exceeds a threshold.
+            </div>
+            <span class="imp-tag">Closes limitation #6</span>
+            <span class="imp-tag">Addresses model drift</span>
+          </div>
+        </div>
+
+        <div class="improvement-item">
+          <div class="imp-icon">📊</div>
+          <div>
+            <div class="imp-title">Uncertainty quantification</div>
+            <div class="imp-desc">
+              Replace point predictions with probability distributions using
+              Monte Carlo Dropout (LSTM) or conformal prediction (Ridge).
+              Display a shaded confidence band on the chart so users understand
+              prediction reliability.
+            </div>
+            <span class="imp-tag">Closes limitation #4</span>
+            <span class="imp-tag">EU AI Act transparency</span>
+          </div>
+        </div>
+
+        <div class="improvement-item">
+          <div class="imp-icon">🌐</div>
+          <div>
+            <div class="imp-title">Live data + rolling retraining</div>
+            <div class="imp-desc">
+              Integrate Yahoo Finance API (yfinance) for daily OHLCV updates.
+              Retrain on a rolling 3-year window so the model stays calibrated
+              to current market conditions without full retraining from scratch.
+            </div>
+            <span class="imp-tag">Closes limitations #1, #3</span>
+          </div>
+        </div>
+
+        <div class="improvement-item">
+          <div class="imp-icon">🧠</div>
+          <div>
+            <div class="imp-title">Multivariate + sentiment features</div>
+            <div class="imp-desc">
+              Add trading volume, VIX index, sector ETF returns, and news sentiment
+              scores (e.g. FinBERT) as additional input features to the LSTM.
+              This moves the model beyond the random-walk baseline.
+            </div>
+            <span class="imp-tag">Closes limitation #2</span>
+          </div>
+        </div>
+
+        <div class="improvement-item">
+          <div class="imp-icon">🤝</div>
+          <div>
+            <div class="imp-title">Ensemble model</div>
+            <div class="imp-desc">
+              Combine LSTM + Ridge + Chronos (fine-tuned) predictions via a
+              meta-learner. Ensemble typically reduces RMSE by 10–20% compared
+              to any single model and is more robust to distributional shifts.
+            </div>
+            <span class="imp-tag">Reduces overall risk</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div><!-- /col 2 -->
+</div><!-- /row -->
+</div><!-- /view-risk -->
+
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+// ── Tab switching ──────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab-view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.tab-btn') .forEach(b => b.classList.remove('active'));
+  $(`view-${name}`).classList.add('active');
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    if (b.textContent.toLowerCase().includes(name === 'risk' ? 'risk' : 'predict'))
+      b.classList.add('active');
+  });
+  if (name === 'risk') loadQualityTable();
+}
+
+async function loadQualityTable() {
+  const res  = await fetch('/api/summary');
+  const data = await res.json();
+
+  const r2Class = v => v === undefined ? '' : v >= 0.95 ? 'perf-good' : v >= 0.90 ? 'perf-ok' : 'perf-bad';
+  const fmtR2   = v => v !== undefined ? `<span class="${r2Class(v)}">${v.toFixed(4)}</span>` : '—';
+  const fmtRMSE = v => v !== undefined ? `$${v.toFixed(3)}` : '—';
+
+  let rows = data.tickers.map(r => {
+    const lstmBetter  = r.lstm_rmse  !== undefined && r.ridge_rmse !== undefined && r.lstm_rmse  < r.ridge_rmse;
+    const ridgeBetter = r.ridge_rmse !== undefined && r.lstm_rmse  !== undefined && r.ridge_rmse < r.lstm_rmse;
+    const winner = lstmBetter
+      ? '<span style="color:#e74c3c;font-weight:700;">LSTM</span>'
+      : ridgeBetter
+        ? '<span style="color:#3498db;font-weight:700;">Ridge</span>'
+        : '<span style="color:var(--muted);">Tie</span>';
+    return `<tr>
+      <td><strong>${r.ticker}</strong></td>
+      <td>${fmtR2(r.lstm_r2)}</td><td>${fmtRMSE(r.lstm_rmse)}</td>
+      <td>${fmtR2(r.ridge_r2)}</td><td>${fmtRMSE(r.ridge_rmse)}</td>
+      <td>${winner}</td>
+    </tr>`;
+  }).join('');
+
+  $('qualityTable').innerHTML = `
+    <tr>
+      <th>Ticker</th>
+      <th>LSTM R²</th><th>LSTM RMSE</th>
+      <th>Ridge R²</th><th>Ridge RMSE</th>
+      <th>Winner (RMSE)</th>
+    </tr>
+    ${rows}`;
+
+  const a = data.avg;
+  $('qualityAvg').innerHTML = `
+    <p style="color:var(--muted);font-size:.78rem;margin:0;">
+      Average across ${data.tickers.length} tickers —
+      LSTM: R²=${a.lstm_r2?.toFixed(4) ?? '—'} / RMSE=$${a.lstm_rmse?.toFixed(3) ?? '—'} &nbsp;|&nbsp;
+      Ridge: R²=${a.ridge_r2?.toFixed(4) ?? '—'} / RMSE=$${a.ridge_rmse?.toFixed(3) ?? '—'}
+    </p>`;
+}
+
+// ── State ──────────────────────────────────────────────────────────────────
+let chart         = null;
+let currentModel  = 'lstm';
+let currentTicker = null;
+let fullData      = null;   // full dataset from server (no date filter)
+let readyTickers  = { lstm: [], ridge: [] };
+let pollTimer     = null;
+
+const COLOR  = { lstm: '#e74c3c', ridge: '#3498db' };
+const LABEL  = { lstm: 'LSTM Prediction', ridge: 'Ridge Prediction' };
+
+const CFG = {
+  lstm: [
+    ['Architecture', 'LSTM (Keras)'],
+    ['Units',        '5'],
+    ['Lookback',     '5 days'],
+    ['Train period', '2000 – 2018'],
+    ['Test period',  'Jan – Jun 2019'],
+    ['Loss',         'MSE'],
+    ['Optimizer',    'Adam (lr=0.001)'],
+    ['Early stop',   'patience=5'],
+  ],
+  ridge: [
+    ['Architecture',   'Ridge Regression'],
+    ['Regularisation', 'L2 (alpha=1.0)'],
+    ['Features',       '12 OHLCV-derived'],
+    ['Train period',   '2016 – 2018'],
+    ['Test period',    'Jan – Jun 2019'],
+    ['Target',         'Next-day Close'],
+  ],
+};
+
+// Default date splits per model
+const SPLITS = {
+  lstm:  { trainStart: '2000-01-01', trainEnd: '2018-12-31',
+            valStart:  '2019-01-01', valEnd:   '2019-03-31',
+            testStart: '2019-04-01', testEnd:  '2019-06-30' },
+  ridge: { trainStart: '2016-01-01', trainEnd: '2018-12-31',
+            valStart:  '2019-01-01', valEnd:   '2019-03-31',
+            testStart: '2019-04-01', testEnd:  '2019-06-30' },
+};
+
+function getSplits() {
+  return {
+    train_start: $('splitTrainStart').value,
+    train_end:   $('splitTrainEnd').value,
+    val_start:   $('splitValStart').value,
+    val_end:     $('splitValEnd').value,
+    test_start:  $('splitTestStart').value,
+    test_end:    $('splitTestEnd').value,
+  };
+}
+
+function loadSplitDefaults(model) {
+  const s = SPLITS[model];
+  $('splitTrainStart').value = s.trainStart;
+  $('splitTrainEnd').value   = s.trainEnd;
+  $('splitValStart').value   = s.valStart;
+  $('splitValEnd').value     = s.valEnd;
+  $('splitTestStart').value  = s.testStart;
+  $('splitTestEnd').value    = s.testEnd;
+}
+
+// ── Micro utils ────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const showSpinner = () => { $('spinner').classList.remove('hidden'); }
+const hideSpinner = () => { $('spinner').classList.add('hidden');    }
+const fmt    = (n, d=2) => Number(n).toFixed(d);
+const fmtUSD = n => '$' + fmt(n);
+
+// ── Boot ───────────────────────────────────────────────────────────────────
+async function boot() {
+  const res  = await fetch('/api/tickers');
+  const data = await res.json();
+  readyTickers.lstm  = data.lstm_ready  || [];
+  readyTickers.ridge = data.ridge_ready || [];
+
+  const bar = $('tickerBar');
+  bar.innerHTML = '';
+  (data.tickers || []).forEach(t => {
+    const b = document.createElement('button');
+    b.className      = 'tbtn';
+    b.textContent    = t;
+    b.dataset.ticker = t;
+    b.onclick = () => selectTicker(t);
+    bar.appendChild(b);
+  });
+
+  loadSplitDefaults('lstm');
+  renderModelConfig();
+  if (data.tickers && data.tickers.length) selectTicker(data.tickers[0]);
+}
+
+// ── Model toggle ───────────────────────────────────────────────────────────
+function setModel(m) {
+  currentModel = m;
+  $('btnLSTM') .className = 'mbtn' + (m === 'lstm'  ? ' al' : '');
+  $('btnRidge').className = 'mbtn' + (m === 'ridge' ? ' ar' : '');
+  $('legColor').style.background = COLOR[m];
+  $('legLabel').textContent       = LABEL[m].replace(' Prediction','');
+  $('spinnerEl').style.color      = COLOR[m];
+  $('tunelstm') .style.display    = m === 'lstm'  ? '' : 'none';
+  $('tuneridge').style.display    = m === 'ridge' ? '' : 'none';
+  loadSplitDefaults(m);
+  renderModelConfig();
+  if (currentTicker) selectTicker(currentTicker);
+}
+
+function renderModelConfig() {
+  $('modelConfigBody').innerHTML = CFG[currentModel]
+    .map(([k,v]) => `<div class="irow"><span class="ikey">${k}</span><span class="ival">${v}</span></div>`)
+    .join('');
+}
+
+// ── Tune panel toggle ──────────────────────────────────────────────────────
+function toggleTune() {
+  const b    = $('tuneBody');
+  const open = b.style.display !== 'none';
+  b.style.display          = open ? 'none' : '';
+  $('tuneChevron').textContent = open ? '▼' : '▲';
+}
+
+// ── Alpha log-scale slider ─────────────────────────────────────────────────
+function onAlphaSlide(v) {
+  const alpha = Math.pow(10, parseFloat(v));
+  $('vAlpha').textContent = alpha >= 10 ? fmt(alpha, 1) : fmt(alpha, 4);
+}
+
+function getAlpha() {
+  return Math.pow(10, parseFloat($('slAlpha').value));
+}
+
+// ── Select ticker ──────────────────────────────────────────────────────────
+async function selectTicker(ticker) {
+  currentTicker = ticker;
+  const ac = currentModel === 'lstm' ? 'al' : 'ar';
+  document.querySelectorAll('.tbtn').forEach(b => {
+    b.className = 'tbtn' + (b.dataset.ticker === ticker ? ` ${ac}` : '');
+  });
+  $('chartTitle').textContent = `${ticker} — Actual vs Predicted Close Price`;
+
+  if (!readyTickers[currentModel].includes(ticker)) {
+    $('metricsBody').innerHTML =
+      `<p style="color:#e67e22;font-size:.84rem;margin:0;">
+         ${currentModel.toUpperCase()} not trained for ${ticker}.
+      </p>`;
+    $('nextDayBody').innerHTML = '';
+    return;
+  }
+
+  showSpinner();
+
+  const predUrl = currentModel === 'lstm'
+    ? `/api/predictions/${ticker}`
+    : `/api/predictions/ridge/${ticker}`;
+  const ndUrl = `/api/next_day/${currentModel}/${ticker}`;
+
+  const [pRes, nRes] = await Promise.all([fetch(predUrl), fetch(ndUrl)]);
+  hideSpinner();
+
+  if (pRes.ok) {
+    const data = await pRes.json();
+    fullData = data;
+    initDatePickers(data.dates);
+    applyDateFilter();
+  }
+  if (nRes.ok) renderNextDay(await nRes.json());
+}
+
+// ── Date filter ────────────────────────────────────────────────────────────
+function initDatePickers(dates) {
+  $('dateFrom').min = $('dateTo').min = dates[0];
+  $('dateFrom').max = $('dateTo').max = dates[dates.length - 1];
+  $('dateFrom').value = dates[0];
+  $('dateTo').value   = dates[dates.length - 1];
+}
+
+function resetDates() {
+  if (!fullData) return;
+  initDatePickers(fullData.dates);
+  applyDateFilter();
+}
+
+function applyDateFilter() {
+  if (!fullData) return;
+  const from = $('dateFrom').value;
+  const to   = $('dateTo').value;
+
+  const indices = fullData.dates.reduce((acc, d, i) => {
+    if (d >= from && d <= to) acc.push(i);
+    return acc;
+  }, []);
+
+  if (!indices.length) return;
+
+  const filtered = {
+    ...fullData,
+    dates: indices.map(i => fullData.dates[i]),
+    true:  indices.map(i => fullData.true[i]),
+    pred:  indices.map(i => fullData.pred[i]),
+  };
+
+  renderChart(filtered, COLOR[currentModel]);
+  renderMetrics(filtered);  // recalculate on filtered subset
+  $('chartSub').textContent =
+    `${filtered.dates[0]} → ${filtered.dates[filtered.dates.length-1]}  ·  ${filtered.dates.length} trading days`;
+}
+
+// ── Chart ──────────────────────────────────────────────────────────────────
+function renderChart(data, color) {
+  const ctx = $('priceChart').getContext('2d');
+  if (chart) chart.destroy();
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: data.dates,
+      datasets: [
+        { label: 'Actual',
+          data: data.true,
+          borderColor: '#e6edf3', borderWidth: 2, pointRadius: 0, tension: 0.1 },
+        { label: LABEL[currentModel],
+          data: data.pred,
+          borderColor: color, borderWidth: 1.5, borderDash: [6,3], pointRadius: 0, tension: 0.1 },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#161b22', borderColor: '#30363d', borderWidth: 1,
+          titleColor: '#e6edf3', bodyColor: '#8b949e',
+          callbacks: { label: c => ` ${c.dataset.label}: ${fmtUSD(c.parsed.y)}` },
+        },
+      },
+      scales: {
+        x: { ticks: { color: '#8b949e', maxTicksLimit: 10 }, grid: { color: '#21262d' } },
+        y: { ticks: { color: '#8b949e', callback: v => fmtUSD(v) }, grid: { color: '#21262d' } },
+      },
+    },
+  });
+}
+
+// ── Metrics (recalculated in JS) ───────────────────────────────────────────
+function jsMetrics(trueArr, predArr) {
+  const n = trueArr.length;
+  if (!n) return null;
+  const mean = a => a.reduce((s,v)=>s+v,0)/n;
+  const mt   = mean(trueArr);
+  const ssTot = trueArr.reduce((s,v)=>s+(v-mt)**2, 0);
+  const ssRes = trueArr.reduce((s,v,i)=>s+(v-predArr[i])**2, 0);
+  const r2   = 1 - ssRes/ssTot;
+  const rmse = Math.sqrt(ssRes/n);
+  const mae  = mean(trueArr.map((v,i)=>Math.abs(v-predArr[i])));
+  return { r2, rmse, mae, n };
+}
+
+function metricBadge(r2) {
+  const grade = r2 >= 0.95 ? 'Excellent' : r2 >= 0.90 ? 'Good' : 'Fair';
+  const col   = r2 >= 0.95 ? 'success'   : r2 >= 0.90 ? 'primary' : 'warning';
+  return `<span class="badge bg-${col} ms-1" style="font-size:.68rem;">${grade}</span>`;
+}
+
+function renderMetrics(data) {
+  const m = jsMetrics(data.true, data.pred);
+  if (!m) return;
+
+  const tp = data.train_period
+    ? `<span style="font-size:.75rem;color:var(--muted);">Train: ${data.train_period}</span>` : '';
+
+  // Test metrics block
+  let html = `
+    <p style="color:var(--muted);font-size:.72rem;font-weight:600;
+              text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">Test set</p>
+    <div class="mrow">
+      <span class="mlbl">R²</span>
+      <span><span class="mval">${fmt(m.r2,4)}</span>${metricBadge(m.r2)}</span>
+    </div>
+    <div class="mrow"><span class="mlbl">RMSE</span><span class="mval">${fmtUSD(m.rmse)}</span></div>
+    <div class="mrow"><span class="mlbl">MAE</span> <span class="mval">${fmtUSD(m.mae)}</span></div>
+    <p style="color:var(--muted);font-size:.73rem;margin-top:6px;margin-bottom:0;">${m.n} samples · ${tp}</p>`;
+
+  // Validation metrics block (from server, if available)
+  if (data.val_r2 !== undefined) {
+    html += `
+    <hr style="border-color:var(--border);margin:10px 0;">
+    <p style="color:var(--muted);font-size:.72rem;font-weight:600;
+              text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">Validation set</p>
+    <div class="mrow">
+      <span class="mlbl">R²</span>
+      <span><span class="mval">${fmt(data.val_r2,4)}</span>${metricBadge(data.val_r2)}</span>
+    </div>
+    <div class="mrow"><span class="mlbl">RMSE</span><span class="mval">${fmtUSD(data.val_rmse)}</span></div>
+    <div class="mrow"><span class="mlbl">MAE</span> <span class="mval">${fmtUSD(data.val_mae)}</span></div>
+    ${data.val_period ? `<p style="color:var(--muted);font-size:.73rem;margin-top:6px;margin-bottom:0;">${data.val_period}</p>` : ''}`;
+  }
+
+  $('metricsBody').innerHTML = html;
+}
+
+// ── Next-day panel ─────────────────────────────────────────────────────────
+function renderNextDay(data) {
+  const up  = data.change >= 0;
+  const col = up ? '#2ecc71' : '#e74c3c';
+  const sgn = up ? '+' : '';
+  $('nextDayBody').innerHTML = `
+    <p style="color:var(--muted);font-size:.78rem;margin-bottom:2px;">Last close (${data.last_date})</p>
+    <p style="font-size:1.25rem;font-weight:700;margin-bottom:12px;">${fmtUSD(data.last_price)}</p>
+    <p style="color:var(--muted);font-size:.78rem;margin-bottom:2px;">Predicted next close</p>
+    <p class="pred-price mb-1" style="color:${col};">${fmtUSD(data.predicted)} ${up?'↑':'↓'}</p>
+    <p class="pred-change mb-0" style="color:${col};">${sgn}${fmtUSD(data.change)} (${sgn}${fmt(data.change_pct)}%)</p>
+    <hr style="border-color:var(--border);margin:9px 0;">
+    <p style="color:var(--muted);font-size:.74rem;margin:0;">From last 5 days of test period (Jun 2019).</p>`;
+}
+
+// ── Ridge tuning ───────────────────────────────────────────────────────────
+async function applyRidge() {
+  if (!currentTicker) return;
+  const alpha = getAlpha();
+  showSpinner();
+  const res = await fetch(`/api/tune/ridge/${currentTicker}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ alpha, ...getSplits() }),
+  });
+  hideSpinner();
+  if (!res.ok) { alert('Ridge tuning failed'); return; }
+  const data = await res.json();
+  fullData = data;
+  initDatePickers(data.dates);
+  applyDateFilter();
+
+  // Update model config card with custom alpha
+  $('modelConfigBody').innerHTML = CFG.ridge
+    .map(([k,v]) => `<div class="irow"><span class="ikey">${k}</span><span class="ival">${v}</span></div>`)
+    .join('') +
+    `<div class="irow" style="color:var(--accent-ridge);">
+       <span class="ikey">Custom alpha</span><span class="ival">${fmt(alpha,4)}</span>
+     </div>`;
+}
+
+// ── LSTM tuning ────────────────────────────────────────────────────────────
+async function trainLSTM() {
+  if (!currentTicker) return;
+  const look_back = parseInt($('slLookback').value);
+  const units     = parseInt($('slUnits').value);
+  const epochs    = parseInt($('slEpochs').value);
+
+  const res = await fetch(`/api/tune/lstm/${currentTicker}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ look_back, units, epochs, ...getSplits() }),
+  });
+  if (!res.ok) { alert('Failed to start training'); return; }
+  const { job_id, total_epochs } = await res.json();
+
+  // Show progress bar
+  const prog = $('lstmProg');
+  prog.style.display = '';
+  $('progFill').style.width = '0%';
+  $('progTxt').textContent  = 'Starting…';
+
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(async () => {
+    const sr = await fetch(`/api/tune/status/${job_id}`);
+    const st = await sr.json();
+
+    if (st.status === 'running' || st.status === 'queued') {
+      const pct = Math.round((st.progress || 0) * 100);
+      $('progFill').style.width = pct + '%';
+      $('progTxt').textContent  = `Epoch ${st.epoch || 0} / ${total_epochs} — ${pct}%`;
+
+    } else if (st.status === 'done') {
+      clearInterval(pollTimer);
+      $('progFill').style.width = '100%';
+      $('progTxt').textContent  = 'Done!';
+      setTimeout(() => { prog.style.display = 'none'; }, 2000);
+
+      fullData = st.result;
+      initDatePickers(fullData.dates);
+      applyDateFilter();
+
+      // Update config card
+      const cfg = st.result.config;
+      $('modelConfigBody').innerHTML = CFG.lstm
+        .map(([k,v]) => `<div class="irow"><span class="ikey">${k}</span><span class="ival">${v}</span></div>`)
+        .join('') +
+        `<div class="irow" style="color:var(--accent-lstm);">
+           <span class="ikey">Custom lb/units/ep</span>
+           <span class="ival">${cfg.look_back} / ${cfg.units} / ${cfg.epochs}</span>
+         </div>`;
+
+    } else if (st.status === 'error') {
+      clearInterval(pollTimer);
+      $('progTxt').textContent = `Error: ${st.error}`;
+    }
+  }, 1500);
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+boot();
+</script>
+</body>
+</html>
