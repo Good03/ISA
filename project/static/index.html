@@ -99,12 +99,64 @@
     .range-ridge input[type=range] { accent-color: var(--accent-ridge); }
     .param-val  { color: var(--text); font-weight: 700; font-size: .84rem; width: 50px; text-align: right; }
 
-    /* ── Progress bar ── */
+    /* ── Tune panel mini progress (still used as fallback) ── */
     .prog-wrap { margin-top: 10px; display: none; }
     .prog-bar  { height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
     .prog-fill { height: 100%; border-radius: 3px; background: var(--accent-lstm);
-                 width: 0%; transition: width .4s ease; }
+                 width: 0%; transition: width .3s ease; }
     .prog-txt  { color: var(--muted); font-size: .78rem; margin-top: 5px; }
+
+    /* ── Full training overlay (on chart area) ── */
+    .train-overlay {
+      position: absolute; inset: 0; z-index: 30;
+      background: var(--surface);
+      border-radius: 8px;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 28px 36px; gap: 0;
+    }
+    .train-overlay.hidden { display: none; }
+
+    .to-title {
+      font-size: 1rem; font-weight: 700; margin-bottom: 6px; color: var(--text);
+    }
+    .to-subtitle {
+      font-size: .8rem; color: var(--muted); margin-bottom: 22px;
+    }
+
+    /* Big progress bar */
+    .to-bar-wrap { width: 100%; max-width: 540px; margin-bottom: 8px; }
+    .to-bar { height: 10px; border-radius: 5px; background: var(--border); overflow: hidden; }
+    .to-bar-fill {
+      height: 100%; border-radius: 5px; background: var(--accent-lstm);
+      width: 0%; transition: width .4s ease;
+    }
+    .to-pct {
+      text-align: right; font-size: .78rem; color: var(--muted); margin-top: 4px;
+      margin-bottom: 18px;
+    }
+
+    /* Phase steps */
+    .to-steps { width: 100%; max-width: 540px; margin-bottom: 20px; }
+    .to-step {
+      display: flex; align-items: center; gap: 10px;
+      padding: 6px 0; font-size: .84rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--muted);
+      transition: color .2s;
+    }
+    .to-step:last-child { border-bottom: none; }
+    .to-step.done    { color: #2ecc71; }
+    .to-step.active  { color: var(--text); font-weight: 600; }
+    .to-step-icon    { width: 20px; text-align: center; font-size: 1rem; flex-shrink: 0; }
+    .to-step-detail  { margin-left: auto; font-size: .76rem; color: var(--muted); }
+
+    /* Stats row */
+    .to-stats {
+      display: flex; gap: 28px; font-size: .8rem; color: var(--muted);
+      width: 100%; max-width: 540px;
+    }
+    .to-stat strong { color: var(--text); }
 
     /* ── Legend ── */
     .leg { display: inline-flex; align-items: center; gap: 5px;
@@ -332,9 +384,52 @@
 
         <div class="card-body" style="position:relative;">
           <div id="chartWrap">
+            <!-- Small spinner for Ridge/load operations -->
             <div class="spinner-overlay hidden" id="spinner">
               <div class="spinner-border" id="spinnerEl" style="color:var(--accent-lstm);" role="status"></div>
             </div>
+
+            <!-- Full training status overlay (LSTM) -->
+            <div class="train-overlay hidden" id="trainOverlay">
+              <div class="to-title" id="toTitle">Training LSTM</div>
+              <div class="to-subtitle" id="toSubtitle">Preparing…</div>
+
+              <div class="to-bar-wrap">
+                <div class="to-bar"><div class="to-bar-fill" id="toBarFill"></div></div>
+                <div class="to-pct" id="toPct">0%</div>
+              </div>
+
+              <div class="to-steps" id="toSteps">
+                <div class="to-step" id="step-loading">
+                  <span class="to-step-icon">⏳</span> Loading dataset
+                  <span class="to-step-detail" id="sd-loading"></span>
+                </div>
+                <div class="to-step" id="step-scaling">
+                  <span class="to-step-icon">⏳</span> Scaling &amp; sequences
+                  <span class="to-step-detail" id="sd-scaling"></span>
+                </div>
+                <div class="to-step" id="step-building">
+                  <span class="to-step-icon">⏳</span> Building model
+                  <span class="to-step-detail" id="sd-building"></span>
+                </div>
+                <div class="to-step" id="step-training">
+                  <span class="to-step-icon">⏳</span> Training
+                  <span class="to-step-detail" id="sd-training"></span>
+                </div>
+                <div class="to-step" id="step-evaluating">
+                  <span class="to-step-icon">⏳</span> Evaluating on test set
+                  <span class="to-step-detail" id="sd-evaluating"></span>
+                </div>
+              </div>
+
+              <div class="to-stats">
+                <span>⏱ <strong id="toElapsed">00:00</strong></span>
+                <span>📦 <strong id="toSamples">—</strong> train samples</span>
+                <span>📉 loss <strong id="toLoss">—</strong></span>
+                <span>📉 val_loss <strong id="toValLoss">—</strong></span>
+              </div>
+            </div>
+
             <canvas id="priceChart"></canvas>
           </div>
           <p style="color:var(--muted);font-size:.78rem;margin-top:8px;text-align:center;" id="chartSub"></p>
@@ -984,6 +1079,76 @@ async function applyRidge() {
 }
 
 // ── LSTM tuning ────────────────────────────────────────────────────────────
+
+// Phase ordering for step indicators
+const PHASES = ['loading', 'scaling', 'building', 'training', 'evaluating'];
+
+let _elapsedTimer = null;
+let _trainStart   = null;
+
+function showTrainOverlay(ticker, look_back, units, epochs) {
+  $('toTitle').textContent    = `Training LSTM — ${ticker}`;
+  $('toSubtitle').textContent = `look_back=${look_back}  ·  units=${units}  ·  epochs=${epochs}`;
+  $('toBarFill').style.width  = '0%';
+  $('toPct').textContent      = '0%';
+  $('toSamples').textContent  = '—';
+  $('toLoss').textContent     = '—';
+  $('toValLoss').textContent  = '—';
+
+  // Reset all steps
+  PHASES.forEach(p => {
+    const el = $(`step-${p}`);
+    el.className = 'to-step';
+    el.querySelector('.to-step-icon').textContent = '⏳';
+    $(`sd-${p}`).textContent = '';
+  });
+
+  $('trainOverlay').classList.remove('hidden');
+
+  // Elapsed timer
+  if (_elapsedTimer) clearInterval(_elapsedTimer);
+  _trainStart = Date.now();
+  _elapsedTimer = setInterval(() => {
+    const s = Math.floor((Date.now() - _trainStart) / 1000);
+    const mm = String(Math.floor(s / 60)).padStart(2, '0');
+    const ss = String(s % 60).padStart(2, '0');
+    $('toElapsed').textContent = `${mm}:${ss}`;
+  }, 1000);
+}
+
+function updateSteps(currentPhase, epoch, totalEpochs, trainLoss, valLoss, trainSamples) {
+  const idx = PHASES.indexOf(currentPhase);
+  PHASES.forEach((p, i) => {
+    const el   = $(`step-${p}`);
+    const icon = el.querySelector('.to-step-icon');
+    const det  = $(`sd-${p}`);
+
+    if (i < idx) {
+      el.className = 'to-step done';
+      icon.textContent = '✅';
+    } else if (i === idx) {
+      el.className = 'to-step active';
+      icon.textContent = p === 'training' ? '🔄' : '⚙️';
+      if (p === 'training' && epoch > 0) {
+        det.textContent = `epoch ${epoch} / ${totalEpochs}`;
+      }
+    } else {
+      el.className = 'to-step';
+      icon.textContent = '⏳';
+      det.textContent  = '';
+    }
+  });
+
+  if (trainSamples) $('toSamples').textContent = trainSamples.toLocaleString();
+  if (trainLoss)    $('toLoss').textContent    = trainLoss.toFixed(6);
+  if (valLoss)      $('toValLoss').textContent = valLoss > 0 ? valLoss.toFixed(6) : '—';
+}
+
+function hideTrainOverlay() {
+  if (_elapsedTimer) { clearInterval(_elapsedTimer); _elapsedTimer = null; }
+  $('trainOverlay').classList.add('hidden');
+}
+
 async function trainLSTM() {
   if (!currentTicker) return;
   const look_back = parseInt($('slLookback').value);
@@ -998,7 +1163,8 @@ async function trainLSTM() {
   if (!res.ok) { alert('Failed to start training'); return; }
   const { job_id, total_epochs } = await res.json();
 
-  // Show progress bar
+  // Show big overlay + mini progress bar
+  showTrainOverlay(currentTicker, look_back, units, epochs);
   const prog = $('lstmProg');
   prog.style.display = '';
   $('progFill').style.width = '0%';
@@ -1009,34 +1175,62 @@ async function trainLSTM() {
     const sr = await fetch(`/api/tune/status/${job_id}`);
     const st = await sr.json();
 
-    if (st.status === 'running' || st.status === 'queued') {
-      const pct = Math.round((st.progress || 0) * 100);
-      $('progFill').style.width = pct + '%';
-      $('progTxt').textContent  = `Epoch ${st.epoch || 0} / ${total_epochs} — ${pct}%`;
+    const pct   = Math.round((st.progress || 0) * 100);
+    const phase = st.phase || 'loading';
 
-    } else if (st.status === 'done') {
+    // Update overlay
+    $('toBarFill').style.width = pct + '%';
+    $('toPct').textContent     = pct + '%';
+    updateSteps(phase, st.epoch || 0, total_epochs,
+                st.train_loss, st.val_loss, st.train_samples);
+
+    // Update mini bar in tune panel
+    $('progFill').style.width = pct + '%';
+    $('progTxt').textContent  = phase === 'training'
+      ? `Epoch ${st.epoch || 0} / ${total_epochs} — ${pct}%`
+      : phase.charAt(0).toUpperCase() + phase.slice(1) + '…';
+
+    if (st.status === 'done') {
       clearInterval(pollTimer);
-      $('progFill').style.width = '100%';
-      $('progTxt').textContent  = 'Done!';
-      setTimeout(() => { prog.style.display = 'none'; }, 2000);
 
-      fullData = st.result;
-      initDatePickers(fullData.dates);
-      applyDateFilter();
+      // Mark all steps done
+      PHASES.forEach(p => {
+        const el = $(`step-${p}`);
+        el.className = 'to-step done';
+        el.querySelector('.to-step-icon').textContent = '✅';
+      });
+      $('toBarFill').style.width = '100%';
+      $('toPct').textContent     = '100%';
+      $('toSubtitle').textContent = `Done! Training complete.`;
+      $('progFill').style.width  = '100%';
+      $('progTxt').textContent   = 'Done!';
 
-      // Update config card
-      const cfg = st.result.config;
-      $('modelConfigBody').innerHTML = CFG.lstm
-        .map(([k,v]) => `<div class="irow"><span class="ikey">${k}</span><span class="ival">${v}</span></div>`)
-        .join('') +
-        `<div class="irow" style="color:var(--accent-lstm);">
-           <span class="ikey">Custom lb/units/ep</span>
-           <span class="ival">${cfg.look_back} / ${cfg.units} / ${cfg.epochs}</span>
-         </div>`;
+      // Brief pause so user sees 100%, then switch to chart
+      setTimeout(() => {
+        hideTrainOverlay();
+        prog.style.display = 'none';
+
+        fullData = st.result;
+        initDatePickers(fullData.dates);
+        applyDateFilter();
+        if (st.result.val_r2 !== undefined) renderMetrics(st.result);
+
+        const cfg = st.result.config;
+        $('modelConfigBody').innerHTML = CFG.lstm
+          .map(([k,v]) => `<div class="irow"><span class="ikey">${k}</span><span class="ival">${v}</span></div>`)
+          .join('') +
+          `<div class="irow" style="color:var(--accent-lstm);">
+             <span class="ikey">Custom lb / units / ep</span>
+             <span class="ival">${cfg.look_back} / ${cfg.units} / ${cfg.epochs}</span>
+           </div>`;
+      }, 1200);
 
     } else if (st.status === 'error') {
       clearInterval(pollTimer);
+      hideTrainOverlay();
       $('progTxt').textContent = `Error: ${st.error}`;
+      $('progFill').style.background = '#e74c3c';
+      alert(`Training error: ${st.error}`);
     }
   }, 1500);
 }

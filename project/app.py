@@ -310,18 +310,24 @@ def _lstm_job(job_id: str, ticker: str, look_back: int, units: int, epochs: int,
     """Runs in a background thread; updates _jobs[job_id] as training progresses."""
     with _train_lock:
         try:
-            _jobs[job_id].update({"status": "running", "progress": 0, "epoch": 0})
+            def _phase(p):
+                _jobs[job_id]["phase"] = p
 
+            _jobs[job_id].update({"status": "running", "progress": 0,
+                                   "epoch": 0, "phase": "loading"})
+
+            _phase("loading")
             df  = _get_df()
             tdf = df[df["Ticker"] == ticker].sort_values("Date")
 
-            train = tdf[(tdf["Date"] >= train_start) & (tdf["Date"] <= train_end)]
-            test  = tdf[(tdf["Date"] >= test_start)  & (tdf["Date"] <= test_end)]
+            train   = tdf[(tdf["Date"] >= train_start) & (tdf["Date"] <= train_end)]
+            test    = tdf[(tdf["Date"] >= test_start)  & (tdf["Date"] <= test_end)]
             has_val = bool(val_start and val_end)
 
             if len(train) < look_back + 10 or len(test) < look_back + 3:
                 raise ValueError("Not enough data in the selected split")
 
+            _phase("scaling")
             scaler       = MinMaxScaler((0, 1))
             train_scaled = scaler.fit_transform(train["Close"].values.reshape(-1, 1))
             test_scaled  = scaler.transform(test["Close"].values.reshape(-1, 1))
@@ -329,7 +335,6 @@ def _lstm_job(job_id: str, ticker: str, look_back: int, units: int, epochs: int,
             X_tr, y_tr = _create_sequences(train_scaled, train_scaled.flatten(), look_back)
             X_te, y_te = _create_sequences(test_scaled,  test_scaled.flatten(),  look_back)
 
-            # Explicit validation set vs internal split
             fit_kwargs: dict = {"validation_split": 0.1}
             if has_val:
                 val = tdf[(tdf["Date"] >= val_start) & (tdf["Date"] <= val_end)]
@@ -338,13 +343,28 @@ def _lstm_job(job_id: str, ticker: str, look_back: int, units: int, epochs: int,
                     X_val, y_val = _create_sequences(val_scaled, val_scaled.flatten(), look_back)
                     fit_kwargs = {"validation_data": (X_val, y_val)}
 
+            _phase("building")
             model = Sequential([Input(shape=(look_back, 1)), LSTM(units), Dense(1)])
             model.compile(optimizer=Adam(0.001), loss="mse")
 
+            _phase("training")
+
             class _Prog(tf.keras.callbacks.Callback):
                 def on_epoch_end(self, epoch, logs=None):
-                    _jobs[job_id]["epoch"]    = epoch + 1
-                    _jobs[job_id]["progress"] = round((epoch + 1) / epochs, 3)
+                    logs = logs or {}
+                    _jobs[job_id].update({
+                        "epoch":      epoch + 1,
+                        "progress":   round((epoch + 1) / epochs, 3),
+                        "train_loss": round(float(logs.get("loss", 0)), 6),
+                        "val_loss":   round(float(logs.get("val_loss", 0)), 6),
+                    })
+
+            _jobs[job_id].update({
+                "train_samples": int(len(X_tr)),
+                "val_samples":   int(len(fit_kwargs.get("validation_data", [[]])[0])
+                                     if "validation_data" in fit_kwargs
+                                     else int(len(X_tr) * 0.1)),
+            })
 
             model.fit(
                 X_tr, y_tr,
@@ -357,7 +377,7 @@ def _lstm_job(job_id: str, ticker: str, look_back: int, units: int, epochs: int,
                 **fit_kwargs,
             )
 
-            # Test metrics
+            _phase("evaluating")
             pred  = scaler.inverse_transform(model.predict(X_te, verbose=0)).flatten()
             true  = scaler.inverse_transform(y_te.reshape(-1, 1)).flatten()
             dates = test["Date"].values[look_back:]
