@@ -304,15 +304,15 @@
           <div id="tunelstm" class="range-lstm">
             <div class="param-row">
               <label>Look-back</label>
-              <input type="range" id="slLookback" min="1" max="60" value="5"
+              <input type="range" id="slLookback" min="1" max="60" value="10"
                      oninput="$('vLookback').textContent=this.value">
-              <span class="param-val" id="vLookback">5</span>
+              <span class="param-val" id="vLookback">10</span>
             </div>
             <div class="param-row">
               <label>Units</label>
-              <input type="range" id="slUnits" min="2" max="128" value="5"
+              <input type="range" id="slUnits" min="2" max="128" value="50"
                      oninput="$('vUnits').textContent=this.value">
-              <span class="param-val" id="vUnits">5</span>
+              <span class="param-val" id="vUnits">50</span>
             </div>
             <div class="param-row">
               <label>Epochs</label>
@@ -750,9 +750,11 @@ const LABEL  = { lstm: 'LSTM Prediction', ridge: 'Ridge Prediction' };
 const CFG = {
   lstm: [
     ['Architecture', 'LSTM (Keras)'],
-    ['Units',        '5'],
-    ['Lookback',     '5 days'],
-    ['Train period', '2000 – 2018'],
+    ['Units',        '50'],
+    ['Lookback',     '10 days'],
+    ['Dropout',      '0.0'],
+    ['Train period', '2000-01 – 2017-06'],
+    ['Val period',   '2017-07 – 2018-12'],
     ['Test period',  'Jan – Jun 2019'],
     ['Loss',         'MSE'],
     ['Optimizer',    'Adam (lr=0.001)'],
@@ -770,9 +772,9 @@ const CFG = {
 
 // Default date splits per model
 const SPLITS = {
-  lstm:  { trainStart: '2000-01-01', trainEnd: '2018-12-31',
-            valStart:  '2019-01-01', valEnd:   '2019-03-31',
-            testStart: '2019-04-01', testEnd:  '2019-06-30' },
+  lstm:  { trainStart: '2000-01-01', trainEnd: '2017-06-30',
+            valStart:  '2017-07-01', valEnd:   '2018-12-31',
+            testStart: '2019-01-01', testEnd:  '2019-06-30' },
   ridge: { trainStart: '2016-01-01', trainEnd: '2018-12-31',
             valStart:  '2019-01-01', valEnd:   '2019-03-31',
             testStart: '2019-04-01', testEnd:  '2019-06-30' },

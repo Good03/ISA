@@ -30,11 +30,13 @@ TEST_START  = "2019-01-01"
 TEST_END    = "2019-06-30"
 
 LSTM_TRAIN_START  = "2000-01-01"
-LSTM_TRAIN_END    = "2018-12-31"
+LSTM_TRAIN_END    = "2017-06-30"
+LSTM_VAL_START    = "2017-07-01"
+LSTM_VAL_END      = "2018-12-31"
 RIDGE_TRAIN_START = "2016-01-01"
 RIDGE_TRAIN_END   = "2018-12-31"
 
-LOOK_BACK    = 5
+LOOK_BACK    = 10
 FEATURE_COLS = [
     "Open", "High", "Low", "Close", "Volume",
     "Close_Lag1", "Close_Lag2", "Close_Lag3",
@@ -419,8 +421,8 @@ def tune_lstm(ticker: str):
 
     train_start = body.get("train_start", LSTM_TRAIN_START)
     train_end   = body.get("train_end",   LSTM_TRAIN_END)
-    val_start   = body.get("val_start",   "")
-    val_end     = body.get("val_end",     "")
+    val_start   = body.get("val_start",   LSTM_VAL_START)
+    val_end     = body.get("val_end",     LSTM_VAL_END)
     test_start  = body.get("test_start",  TEST_START)
     test_end    = body.get("test_end",    TEST_END)
 

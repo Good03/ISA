@@ -2,7 +2,8 @@
 Train LSTM and Ridge models for NASDAQ-100 stock price prediction (Mini-Project 2).
 
 LSTM best config (9-experiment sweep):
-  look_back=5, units=5, epochs=50, train 2000-2018
+  look_back=10, units=50, dropout=0.0, epochs=50
+  train 2000-01-01 → 2017-06-30, val 2017-07-01 → 2018-12-31, test 2019-01-01 → 2019-06-30
 
 Ridge config (from notebook):
   12 OHLCV features, alpha=1.0, train 2016-2018
@@ -33,11 +34,13 @@ DATA_PATH = os.getenv("DATA_PATH", "/app/data/NASDAQ100_Historical_Data.csv")
 TEST_START = "2019-01-01"
 TEST_END   = "2019-06-30"
 
-# LSTM hyper-parameters
+# LSTM hyper-parameters — best config from 9-experiment sweep
 LSTM_TRAIN_START = "2000-01-01"
-LSTM_TRAIN_END   = "2018-12-31"
-LOOK_BACK = 5
-UNITS     = 5
+LSTM_TRAIN_END   = "2017-06-30"   # explicit train/val split (notebook: TRAIN_END_ACTUAL)
+LSTM_VAL_START   = "2017-07-01"
+LSTM_VAL_END     = "2018-12-31"   # used for early stopping
+LOOK_BACK = 10
+UNITS     = 50
 EPOCHS    = 50
 BATCH     = 16
 
@@ -88,24 +91,29 @@ def train_lstm(ticker: str, df: pd.DataFrame) -> bool:
     print(f"  [{ticker}] Training LSTM...", flush=True)
     tdf   = df[df["Ticker"] == ticker].sort_values("Date")
     train = tdf[(tdf["Date"] >= LSTM_TRAIN_START) & (tdf["Date"] <= LSTM_TRAIN_END)]
+    val   = tdf[(tdf["Date"] >= LSTM_VAL_START)   & (tdf["Date"] <= LSTM_VAL_END)]
     test  = tdf[(tdf["Date"] >= TEST_START)        & (tdf["Date"] <= TEST_END)]
 
-    if len(train) < 50 or len(test) < LOOK_BACK + 5:
+    if len(train) < 50 or len(val) < LOOK_BACK + 5 or len(test) < LOOK_BACK + 5:
         print(f"  [{ticker}] LSTM: insufficient data", flush=True)
         return False
 
+    # Fit scaler on train only; transform val and test without leaking future info
     scaler       = MinMaxScaler((0, 1))
     train_scaled = scaler.fit_transform(train["Close"].values.reshape(-1, 1))
+    val_scaled   = scaler.transform(val["Close"].values.reshape(-1, 1))
     test_scaled  = scaler.transform(test["Close"].values.reshape(-1, 1))
 
     X_tr, y_tr = create_sequences(train_scaled, train_scaled.flatten(), LOOK_BACK)
+    X_va, y_va = create_sequences(val_scaled,   val_scaled.flatten(),   LOOK_BACK)
     X_te, y_te = create_sequences(test_scaled,  test_scaled.flatten(),  LOOK_BACK)
 
     model = Sequential([Input(shape=(LOOK_BACK, 1)), LSTM(UNITS), Dense(1)])
     model.compile(optimizer=Adam(0.001), loss="mse")
     model.fit(
         X_tr, y_tr,
-        epochs=EPOCHS, batch_size=BATCH, validation_split=0.1,
+        epochs=EPOCHS, batch_size=BATCH,
+        validation_data=(X_va, y_va),
         callbacks=[EarlyStopping(monitor="val_loss", patience=5, restore_best_weights=True)],
         verbose=0,
     )
