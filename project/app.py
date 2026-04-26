@@ -300,6 +300,19 @@ def tune_ridge(ticker: str):
                 result["val_true"]   = val["Target"].values.tolist()
                 result["val_pred"]   = val_pred.tolist()
 
+        # Next-day prediction: run inference on the last test-set row's features
+        last_row  = test.iloc[-1]
+        nd_pred   = float(model.predict(np.array([[last_row[f] for f in FEATURE_COLS]]))[0])
+        nd_last   = float(last_row["Close"])
+        result["next_day"] = {
+            "ticker":     ticker,
+            "last_price": nd_last,
+            "last_date":  str(last_row["Date"])[:10],
+            "predicted":  nd_pred,
+            "change":     nd_pred - nd_last,
+            "change_pct": (nd_pred - nd_last) / nd_last * 100,
+        }
+
         return jsonify(result)
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
@@ -404,6 +417,21 @@ def _lstm_job(job_id: str, ticker: str, look_back: int, units: int, epochs: int,
                 result["val_rmse"]  = m_val["rmse"]
                 result["val_mae"]   = m_val["mae"]
                 result["val_period"] = f"{val_start} – {val_end}"
+
+            # Next-day prediction: use last look_back true prices from the test set
+            nd_recent = true[-look_back:]
+            nd_scaled = scaler.transform(nd_recent.reshape(-1, 1)).flatten()
+            nd_X      = nd_scaled.reshape(1, look_back, 1).astype(np.float32)
+            nd_pred   = float(scaler.inverse_transform(model.predict(nd_X, verbose=0))[0, 0])
+            nd_last   = float(true[-1])
+            result["next_day"] = {
+                "ticker":     ticker,
+                "last_price": nd_last,
+                "last_date":  str(dates[-1])[:10] if len(dates) else "",
+                "predicted":  nd_pred,
+                "change":     nd_pred - nd_last,
+                "change_pct": (nd_pred - nd_last) / nd_last * 100,
+            }
 
             _jobs[job_id].update({"status": "done", "progress": 1.0, "result": result})
 

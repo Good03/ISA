@@ -245,6 +245,16 @@
     <span class="ctrl-label">Model</span>
     <button class="mbtn al" id="btnLSTM"  onclick="setModel('lstm')">LSTM</button>
     <button class="mbtn"    id="btnRidge" onclick="setModel('ridge')">Ridge</button>
+    <div class="ctrl-sep"></div>
+    <button onclick="resetCurrentState()"
+            title="Clear custom training result — reload saved model from server"
+            style="background:transparent;border:1px solid var(--border);color:var(--muted);
+                   border-radius:6px;padding:4px 12px;font-size:.8rem;cursor:pointer;
+                   transition:border-color .15s,color .15s;"
+            onmouseover="this.style.borderColor='var(--text)';this.style.color='var(--text)'"
+            onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">
+      ↺ Reset
+    </button>
   </div>
 
   <div class="row g-3">
@@ -691,27 +701,67 @@ function switchTab(name) {
     if (b.textContent.toLowerCase().includes(name === 'risk' ? 'risk' : 'predict'))
       b.classList.add('active');
   });
-  if (name === 'risk') loadQualityTable();
+  if (name === 'risk') {
+    if (qualityData) renderQualityTable(); // instant re-render with latest patched data
+    else loadQualityTable();               // first open: fetch from server
+  }
 }
 
+// In-memory quality data — updated both on load and after every training
+let qualityData = null;
+
 async function loadQualityTable() {
-  const res  = await fetch('/api/summary');
-  const data = await res.json();
+  const res = await fetch('/api/summary');
+  qualityData = await res.json();
+  renderQualityTable();
+}
+
+// Call this after Ridge or LSTM tuning to patch the row without a server round-trip
+function patchQualityRow(ticker, model, r2, rmse, mae) {
+  if (!qualityData) return;
+  let row = qualityData.tickers.find(r => r.ticker === ticker);
+  if (!row) {
+    row = { ticker };
+    qualityData.tickers.push(row);
+    qualityData.tickers.sort((a, b) => a.ticker.localeCompare(b.ticker));
+  }
+  row[`${model}_r2`]   = +r2.toFixed(4);
+  row[`${model}_rmse`] = +rmse.toFixed(4);
+  row[`${model}_mae`]  = +mae.toFixed(4);
+
+  // Recalculate averages
+  ['lstm', 'ridge'].forEach(m => {
+    ['r2', 'rmse', 'mae'].forEach(k => {
+      const key  = `${m}_${k}`;
+      const vals = qualityData.tickers.map(r => r[key]).filter(v => v !== undefined);
+      qualityData.avg[key] = vals.length
+        ? +(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(4)
+        : null;
+    });
+  });
+
+  renderQualityTable();
+}
+
+function renderQualityTable() {
+  if (!qualityData) return;
+  const data = qualityData;
 
   const r2Class = v => v === undefined ? '' : v >= 0.95 ? 'perf-good' : v >= 0.90 ? 'perf-ok' : 'perf-bad';
   const fmtR2   = v => v !== undefined ? `<span class="${r2Class(v)}">${v.toFixed(4)}</span>` : '—';
   const fmtRMSE = v => v !== undefined ? `$${v.toFixed(3)}` : '—';
 
-  let rows = data.tickers.map(r => {
+  const rows = data.tickers.map(r => {
     const lstmBetter  = r.lstm_rmse  !== undefined && r.ridge_rmse !== undefined && r.lstm_rmse  < r.ridge_rmse;
     const ridgeBetter = r.ridge_rmse !== undefined && r.lstm_rmse  !== undefined && r.ridge_rmse < r.lstm_rmse;
     const winner = lstmBetter
       ? '<span style="color:#e74c3c;font-weight:700;">LSTM</span>'
       : ridgeBetter
         ? '<span style="color:#3498db;font-weight:700;">Ridge</span>'
-        : '<span style="color:var(--muted);">Tie</span>';
-    return `<tr>
-      <td><strong>${r.ticker}</strong></td>
+        : '<span style="color:var(--muted);">—</span>';
+    const isActive = r.ticker === currentTicker;
+    return `<tr${isActive ? ' style="background:rgba(255,255,255,.04);"' : ''}>
+      <td><strong>${r.ticker}</strong>${isActive ? ' <span style="color:var(--muted);font-size:.72rem;">●</span>' : ''}</td>
       <td>${fmtR2(r.lstm_r2)}</td><td>${fmtRMSE(r.lstm_rmse)}</td>
       <td>${fmtR2(r.ridge_r2)}</td><td>${fmtRMSE(r.ridge_rmse)}</td>
       <td>${winner}</td>
@@ -731,7 +781,8 @@ async function loadQualityTable() {
   $('qualityAvg').innerHTML = `
     <p style="color:var(--muted);font-size:.78rem;margin:0;">
       Average across ${data.tickers.length} tickers —
-      LSTM: R²=${a.lstm_r2?.toFixed(4) ?? '—'} / RMSE=$${a.lstm_rmse?.toFixed(3) ?? '—'} &nbsp;|&nbsp;
+      LSTM: R²=${a.lstm_r2?.toFixed(4) ?? '—'} / RMSE=$${a.lstm_rmse?.toFixed(3) ?? '—'}
+      &nbsp;|&nbsp;
       Ridge: R²=${a.ridge_r2?.toFixed(4) ?? '—'} / RMSE=$${a.ridge_rmse?.toFixed(3) ?? '—'}
     </p>`;
 }
@@ -740,9 +791,46 @@ async function loadQualityTable() {
 let chart         = null;
 let currentModel  = 'lstm';
 let currentTicker = null;
-let fullData      = null;   // full dataset from server (no date filter)
+let fullData      = null;
 let readyTickers  = { lstm: [], ridge: [] };
 let pollTimer     = null;
+
+// modelState[ticker][model] = { predictions, nextDay, isCustom, config }
+// Single source of truth — persists across ticker/model/tab switches.
+const modelState = {};
+
+function _stateSet(ticker, model, predictions, nextDay, config = null) {
+  if (!modelState[ticker]) modelState[ticker] = {};
+  modelState[ticker][model] = { predictions, nextDay, isCustom: config !== null, config };
+}
+
+function _stateGet(ticker, model) {
+  return modelState[ticker]?.[model] ?? null;
+}
+
+function _stateClear(ticker, model) {
+  if (modelState[ticker]) delete modelState[ticker][model];
+}
+
+// Visual indicator — dots on ticker buttons when they have custom state
+function _refreshTickerBadges() {
+  document.querySelectorAll('.tbtn').forEach(b => {
+    const t   = b.dataset.ticker;
+    const hasCustom = modelState[t] &&
+      Object.values(modelState[t]).some(s => s.isCustom);
+    b.title = hasCustom ? 'Custom trained' : '';
+    const dot = b.querySelector('.tbtn-dot');
+    if (hasCustom && !dot) {
+      const d = document.createElement('span');
+      d.className = 'tbtn-dot';
+      d.style.cssText = 'display:inline-block;width:5px;height:5px;border-radius:50%;' +
+        'background:#f39c12;margin-left:5px;vertical-align:middle;';
+      b.appendChild(d);
+    } else if (!hasCustom && dot) {
+      dot.remove();
+    }
+  });
+}
 
 const COLOR  = { lstm: '#e74c3c', ridge: '#3498db' };
 const LABEL  = { lstm: 'LSTM Prediction', ridge: 'Ridge Prediction' };
@@ -873,9 +961,15 @@ function getAlpha() {
 // ── Select ticker ──────────────────────────────────────────────────────────
 async function selectTicker(ticker) {
   currentTicker = ticker;
+
+  // Update button highlight
   const ac = currentModel === 'lstm' ? 'al' : 'ar';
   document.querySelectorAll('.tbtn').forEach(b => {
-    b.className = 'tbtn' + (b.dataset.ticker === ticker ? ` ${ac}` : '');
+    const isActive = b.dataset.ticker === ticker;
+    const dot = b.querySelector('.tbtn-dot');
+    // rebuild className without old active class, keep dot span
+    b.className = 'tbtn' + (isActive ? ` ${ac}` : '');
+    if (dot) b.appendChild(dot); // re-attach dot (className reset removes it)
   });
   $('chartTitle').textContent = `${ticker} — Actual vs Predicted Close Price`;
 
@@ -883,13 +977,20 @@ async function selectTicker(ticker) {
     $('metricsBody').innerHTML =
       `<p style="color:#e67e22;font-size:.84rem;margin:0;">
          ${currentModel.toUpperCase()} not trained for ${ticker}.
-      </p>`;
+       </p>`;
     $('nextDayBody').innerHTML = '';
     return;
   }
 
-  showSpinner();
+  // ── Use cached state if available (avoids server round-trip, preserves custom results)
+  const cached = _stateGet(ticker, currentModel);
+  if (cached) {
+    _applyState(cached);
+    return;
+  }
 
+  // ── First load: fetch from server and cache
+  showSpinner();
   const predUrl = currentModel === 'lstm'
     ? `/api/predictions/${ticker}`
     : `/api/predictions/ridge/${ticker}`;
@@ -898,13 +999,45 @@ async function selectTicker(ticker) {
   const [pRes, nRes] = await Promise.all([fetch(predUrl), fetch(ndUrl)]);
   hideSpinner();
 
-  if (pRes.ok) {
-    const data = await pRes.json();
-    fullData = data;
-    initDatePickers(data.dates);
-    applyDateFilter();
+  if (pRes.ok && nRes.ok) {
+    const predictions = await pRes.json();
+    const nextDay     = await nRes.json();
+    _stateSet(ticker, currentModel, predictions, nextDay);
+    _applyState(_stateGet(ticker, currentModel));
   }
-  if (nRes.ok) renderNextDay(await nRes.json());
+}
+
+function _applyState(state) {
+  const { predictions, nextDay, isCustom, config } = state;
+  fullData = predictions;
+  initDatePickers(predictions.dates);
+  applyDateFilter();
+  if (nextDay) renderNextDay(nextDay);
+
+  // Show custom-config indicator in Model Configuration card
+  if (isCustom && config) {
+    const base = CFG[currentModel]
+      .map(([k,v]) => `<div class="irow"><span class="ikey">${k}</span><span class="ival">${v}</span></div>`)
+      .join('');
+    const color = currentModel === 'lstm' ? 'var(--accent-lstm)' : 'var(--accent-ridge)';
+    const label = currentModel === 'lstm'
+      ? `lb=${config.look_back} / units=${config.units} / ep=${config.epochs}`
+      : `alpha=${fmt(config.alpha ?? 1, 4)}`;
+    $('modelConfigBody').innerHTML = base +
+      `<div class="irow" style="color:${color};">
+         <span class="ikey">⚙ Custom</span><span class="ival">${label}</span>
+       </div>`;
+  } else {
+    renderModelConfig();
+  }
+}
+
+// Reset cached state for current ticker+model → next selectTicker call re-fetches from server
+function resetCurrentState() {
+  if (!currentTicker) return;
+  _stateClear(currentTicker, currentModel);
+  _refreshTickerBadges();
+  selectTicker(currentTicker);
 }
 
 // ── Date filter ────────────────────────────────────────────────────────────
@@ -1067,17 +1200,10 @@ async function applyRidge() {
   hideSpinner();
   if (!res.ok) { alert('Ridge tuning failed'); return; }
   const data = await res.json();
-  fullData = data;
-  initDatePickers(data.dates);
-  applyDateFilter();
-
-  // Update model config card with custom alpha
-  $('modelConfigBody').innerHTML = CFG.ridge
-    .map(([k,v]) => `<div class="irow"><span class="ikey">${k}</span><span class="ival">${v}</span></div>`)
-    .join('') +
-    `<div class="irow" style="color:var(--accent-ridge);">
-       <span class="ikey">Custom alpha</span><span class="ival">${fmt(alpha,4)}</span>
-     </div>`;
+  _stateSet(currentTicker, 'ridge', data, data.next_day ?? null, { alpha });
+  _applyState(_stateGet(currentTicker, 'ridge'));
+  patchQualityRow(currentTicker, 'ridge', data.r2, data.rmse, data.mae);
+  _refreshTickerBadges();
 }
 
 // ── LSTM tuning ────────────────────────────────────────────────────────────
@@ -1212,19 +1338,12 @@ async function trainLSTM() {
         hideTrainOverlay();
         prog.style.display = 'none';
 
-        fullData = st.result;
-        initDatePickers(fullData.dates);
-        applyDateFilter();
-        if (st.result.val_r2 !== undefined) renderMetrics(st.result);
-
         const cfg = st.result.config;
-        $('modelConfigBody').innerHTML = CFG.lstm
-          .map(([k,v]) => `<div class="irow"><span class="ikey">${k}</span><span class="ival">${v}</span></div>`)
-          .join('') +
-          `<div class="irow" style="color:var(--accent-lstm);">
-             <span class="ikey">Custom lb / units / ep</span>
-             <span class="ival">${cfg.look_back} / ${cfg.units} / ${cfg.epochs}</span>
-           </div>`;
+        _stateSet(currentTicker, 'lstm', st.result, st.result.next_day ?? null, cfg);
+        _applyState(_stateGet(currentTicker, 'lstm'));
+        if (st.result.val_r2 !== undefined) renderMetrics(st.result);
+        patchQualityRow(currentTicker, 'lstm', st.result.r2, st.result.rmse, st.result.mae);
+        _refreshTickerBadges();
       }, 1200);
 
     } else if (st.status === 'error') {
