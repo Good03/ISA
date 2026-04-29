@@ -1825,10 +1825,10 @@ let searchFocusIdx = -1;
 
 function filteredSearchList(q) {
   q = (q || '').trim().toUpperCase();
-  if (!q) return allTickers.slice(0, 30);
+  if (!q) return allTickers;
   const starts = allTickers.filter(t => t.startsWith(q));
   const contains = allTickers.filter(t => !t.startsWith(q) && t.includes(q));
-  return [...starts, ...contains].slice(0, 30);
+  return [...starts, ...contains];
 }
 
 function onSearchFocus() {
