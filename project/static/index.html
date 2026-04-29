@@ -1373,13 +1373,13 @@
               <td>Misuse for live investment decisions</td>
               <td><span class="pill high">High</span></td>
               <td><span class="pill medium">Medium</span></td>
-              <td>Prominent disclaimer; no live brokerage integration</td>
+              <td>Prominent disclaimer</td>
             </tr>
             <tr>
               <td>Lack of uncertainty quantification</td>
               <td><span class="pill low">Low</span></td>
               <td><span class="pill high">High</span></td>
-              <td>Report as limitation; Bayesian-LSTM in roadmap</td>
+              <td>Report as limitation. Bayesian-LSTM in roadmap</td>
             </tr>
           </table>
         </div>
@@ -1413,21 +1413,16 @@
             <tr><th style="width:30px;">#</th><th>Limitation</th><th>Impact</th></tr>
             <tr>
               <td class="mono text-dim">01</td>
-              <td><strong>Training cutoff 2018</strong> — model has no knowledge of COVID crash (2020), the 2022 rate-hike bear market, or the 2023–24 AI rally</td>
-              <td class="text-muted">Elevated test error post-2019</td>
-            </tr>
-            <tr>
-              <td class="mono text-dim">02</td>
               <td><strong>Univariate LSTM</strong> — Close price only; ignores volume, sentiment, macro indicators, earnings releases</td>
               <td class="text-muted">Cannot react to fundamentals</td>
             </tr>
             <tr>
-              <td class="mono text-dim">03</td>
+              <td class="mono text-dim">02</td>
               <td><strong>Point predictions</strong> — no confidence intervals or probability distribution; user cannot assess uncertainty</td>
               <td class="text-muted">Overconfidence risk</td>
             </tr>
             <tr>
-              <td class="mono text-dim">04</td>
+              <td class="mono text-dim">03</td>
               <td><strong>Single-step horizon</strong> — 1-day forecast only; not suited for multi-week portfolio planning</td>
               <td class="text-muted">Limited applicability</td>
             </tr>
@@ -1447,7 +1442,6 @@
                 Capture user-flagged prediction errors via thumbs up/down. Persist <code>actual</code> vs <code>predicted</code>
                 to a feedback store and trigger weekly retraining whenever rolling RMSE breaches a configured threshold.
               </div>
-              <span class="imp-tag">closes #06</span><span class="imp-tag">addresses drift</span>
             </div>
           </div>
 
@@ -1459,7 +1453,6 @@
                 Replace point estimates with predictive distributions: Monte-Carlo Dropout for the LSTM, conformal
                 prediction for Ridge. Render a confidence band overlay so users can read reliability at a glance.
               </div>
-              <span class="imp-tag">closes #04</span><span class="imp-tag">EU AI Act transparency</span>
             </div>
           </div>
 
@@ -1471,7 +1464,6 @@
                 Ingest daily OHLCV from Yahoo Finance (yfinance). Retrain on a rolling 3-year window so the model stays
                 aligned with the prevailing regime without a full retrain from scratch.
               </div>
-              <span class="imp-tag">closes #01, #03</span>
             </div>
           </div>
 
@@ -1483,7 +1475,6 @@
                 Add trading volume, VIX, sector ETF returns and FinBERT-derived news sentiment to the LSTM input
                 tensor. Moves the model meaningfully beyond the random-walk baseline.
               </div>
-              <span class="imp-tag">closes #02</span>
             </div>
           </div>
 
