@@ -134,8 +134,12 @@ def index():
 
 @app.route("/api/tickers")
 def tickers():
+    try:
+        all_tickers = sorted(_get_df()["Ticker"].unique().tolist())
+    except Exception:
+        all_tickers = sorted(set(_lstm_results) | set(_ridge_results))
     return jsonify({
-        "tickers":     sorted(set(_lstm_results) | set(_ridge_results)),
+        "tickers":     all_tickers,
         "lstm_ready":  sorted(_lstm_results.keys()),
         "ridge_ready": sorted(_ridge_results.keys()),
     })
