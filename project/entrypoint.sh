@@ -11,7 +11,7 @@ if [ "${PRETRAIN:-0}" = "1" ]; then
   RIDGE_TRAINED=$(find "${MODEL_DIR}" -name "*_ridge_results.json" 2>/dev/null | wc -l)
   if [ "${LSTM_TRAINED}" -eq 0 ] || [ "${RIDGE_TRAINED}" -eq 0 ]; then
     echo "========================================================"
-    echo " PRETRAIN=1 - training default tickers (~10-20 min on CPU)"
+    echo " PRETRAIN=1 - training default tickers"
     echo "========================================================"
     python train.py
   fi

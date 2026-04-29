@@ -10,7 +10,7 @@ RUN pip install --default-timeout=1000 --no-cache-dir -r requirements.txt
 COPY app.py train.py entrypoint.sh ./
 COPY static/ static/
 
-RUN chmod +x entrypoint.sh
+RUN sed -i 's/\r//' entrypoint.sh && chmod +x entrypoint.sh
 
 EXPOSE 8080
 
